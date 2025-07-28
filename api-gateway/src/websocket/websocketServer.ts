@@ -1,13 +1,18 @@
-// api-gateway/src/websocket/websocketServer.ts
-// WebSocket Server for Real-time Job Monitoring
-
+// api-gateway/src/websocket/websocketServer.ts - FIXED VERSION
 import { Server } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Pool } from 'pg';
-import Redis from 'redis';
 
 // Use require for JWT to avoid type issues
 const jwt = require('jsonwebtoken');
+
+// Import Redis conditionally
+let Redis: any = null;
+try {
+  Redis = require('redis');
+} catch (error) {
+  console.warn('⚠️ Redis not available, real-time updates will use polling');
+}
 
 interface AuthenticatedSocket extends Socket {
   userId?: number;
@@ -51,6 +56,12 @@ export class WebSocketServer {
   }
 
   private async initializeRedis() {
+    if (!Redis) {
+      console.warn('⚠️ Redis not available, using database polling for updates');
+      this.setupDatabasePolling();
+      return;
+    }
+
     try {
       const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
       this.redisClient = Redis.createClient({ url: redisUrl });
@@ -58,15 +69,17 @@ export class WebSocketServer {
       await this.redisClient.connect();
       console.log('✅ WebSocket Redis client connected');
     } catch (error) {
-      console.warn('⚠️ WebSocket Redis connection failed, real-time updates may be limited:', error);
+      console.warn('⚠️ WebSocket Redis connection failed, using database polling:', error);
+      this.setupDatabasePolling();
     }
   }
 
   private setupAuthentication() {
     // Authentication middleware for WebSocket connections
-    this.io.use(async (socket: any, next) => {
+    this.io.use(async (socket: AuthenticatedSocket, next) => {
       try {
-        const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.split(' ')[1];
+        const token = socket.handshake.auth.token || 
+                     socket.handshake.headers.authorization?.split(' ')[1];
         
         if (!token) {
           return next(new Error('Authentication token required'));
@@ -315,20 +328,25 @@ export class WebSocketServer {
       return;
     }
 
-    // Subscribe to job update notifications from Redis
-    const subscriber = this.redisClient.duplicate();
-    subscriber.connect().then(() => {
-      subscriber.subscribe('job-updates', (message: string) => {
-        try {
-          const update = JSON.parse(message);
-          this.broadcastJobUpdate(update);
-        } catch (error) {
-          console.error('💥 Error processing job update:', error);
-        }
+    try {
+      // Subscribe to job update notifications from Redis
+      const subscriber = this.redisClient.duplicate();
+      subscriber.connect().then(() => {
+        subscriber.subscribe('job-updates', (message: string) => {
+          try {
+            const update = JSON.parse(message);
+            this.broadcastJobUpdate(update);
+          } catch (error) {
+            console.error('💥 Error processing job update:', error);
+          }
+        });
       });
-    });
 
-    console.log('📡 Subscribed to Redis job updates');
+      console.log('📡 Subscribed to Redis job updates');
+    } catch (error) {
+      console.error('💥 Redis subscription error:', error);
+      this.setupDatabasePolling();
+    }
   }
 
   private setupDatabasePolling() {
@@ -387,7 +405,7 @@ export class WebSocketServer {
   }
 
   public async notifyJobStatusChange(jobId: string, status: string, userId?: number, results?: any) {
-    // Publish to Redis for other instances
+    // Publish to Redis for other instances (if available)
     if (this.redisClient) {
       try {
         await this.redisClient.publish('job-updates', JSON.stringify({

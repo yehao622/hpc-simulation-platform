@@ -1,4 +1,4 @@
-// api-gateway/src/index.ts - UPDATED with WebSocket Integration
+// api-gateway/src/index.ts - FIXED with Optional WebSocket
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -7,8 +7,16 @@ import morgan from 'morgan';
 import { createServer } from 'http';
 import { Pool } from 'pg';
 
-// Import WebSocket server
-import { WebSocketServer } from './websocket/websocketServer';
+// Import WebSocket server with error handling
+let WebSocketServer: any = null;
+try {
+  const wsModule = require('./websocket/websocketServer');
+  WebSocketServer = wsModule.WebSocketServer;
+  console.log('✅ WebSocket module loaded successfully');
+} catch (error) {
+  console.warn('⚠️ WebSocket module not available:', (error as any).message);
+  console.info('🔄 API will run without real-time updates');
+}
 
 // Import existing controllers and middleware
 import * as authController from './controllers/authController';
@@ -18,10 +26,10 @@ import { authenticateToken, authRateLimit } from './middleware/authMiddleware';
 const app = express();
 const port = parseInt(process.env.PORT || '3000', 10);
 
-// Create HTTP server for WebSocket integration
+// Create HTTP server for optional WebSocket integration
 const server = createServer(app);
 
-console.log('🚀 Starting HPC Simulation API Gateway with WebSocket support...');
+console.log('🚀 Starting HPC Simulation API Gateway...');
 
 // Database connection
 let dbPool: Pool;
@@ -34,8 +42,8 @@ const getDbPool = () => {
   return dbPool;
 };
 
-// Initialize WebSocket server
-let wsServer: WebSocketServer;
+// WebSocket server (optional)
+let wsServer: any = null;
 
 // Middleware configuration
 app.use(helmet({
@@ -67,14 +75,14 @@ if (process.env.NODE_ENV !== 'test') {
 
 console.log('🔧 Middleware configured');
 
-// Health check endpoint with WebSocket status
+// Health check endpoint with optional WebSocket status
 app.get('/api/health', async (req, res) => {
   console.log('💓 Health check requested');
   
   const health = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '1.1.0', // Updated version with WebSocket
+    version: '1.1.0',
     environment: process.env.NODE_ENV || 'development',
     services: {
       database: 'unknown',
@@ -82,6 +90,7 @@ app.get('/api/health', async (req, res) => {
       websocket: 'unknown'
     },
     websocket: {
+      enabled: !!wsServer,
       connectedUsers: 0,
       totalConnections: 0
     }
@@ -100,27 +109,30 @@ app.get('/api/health', async (req, res) => {
   }
 
   try {
-    // Test Redis connection
+    // Test Redis connection (optional)
     health.services.redis = 'available';
   } catch (error) {
     health.services.redis = 'disconnected';
-    health.status = 'degraded';
   }
 
-  // WebSocket status
+  // WebSocket status (optional)
   if (wsServer) {
     health.services.websocket = 'active';
-    health.websocket.connectedUsers = wsServer.getConnectedUsersCount();
-    health.websocket.totalConnections = wsServer.getConnectionsCount();
+    try {
+      health.websocket.connectedUsers = wsServer.getConnectedUsersCount();
+      health.websocket.totalConnections = wsServer.getConnectionsCount();
+    } catch (wsError) {
+      health.services.websocket = 'error';
+    }
   } else {
-    health.services.websocket = 'not_initialized';
+    health.services.websocket = 'disabled';
   }
 
   const statusCode = health.status === 'healthy' ? 200 : 503;
   res.status(statusCode).json(health);
 });
 
-// Root endpoint with WebSocket info
+// Root endpoint
 app.get('/', (req, res) => {
   console.log('🏠 Root endpoint requested');
   res.json({
@@ -128,91 +140,148 @@ app.get('/', (req, res) => {
     version: '1.1.0',
     status: 'running',
     timestamp: new Date().toISOString(),
-    features: ['REST API', 'WebSocket Real-time Updates', 'JWT Authentication'],
+    features: [
+      'REST API', 
+      'JWT Authentication',
+      ...(wsServer ? ['WebSocket Real-time Updates'] : ['Database Polling'])
+    ],
     documentation: '/api/docs',
-    websocket: {
+    websocket: wsServer ? {
       endpoint: '/socket.io/',
       authentication: 'JWT token required',
       events: ['job-status-update', 'job-update', 'active-jobs']
+    } : {
+      status: 'disabled',
+      reason: 'WebSocket dependencies not available'
     },
     endpoints: {
       health: '/api/health',
       auth: '/api/v1/auth',
       simulations: '/api/v1/simulations',
-      websocket: '/socket.io/'
+      ...(wsServer && { websocket: '/socket.io/' })
     }
   });
 });
 
-// Enhanced API Documentation with WebSocket info
+// Enhanced API Documentation
 app.get('/api/docs', (req, res) => {
   res.json({
     title: 'HPC Simulation Platform API v1.1',
     version: '1.1.0',
-    description: 'RESTful API with WebSocket real-time updates for managing HPC network simulations',
+    description: 'RESTful API for managing HPC network simulations' + (wsServer ? ' with WebSocket real-time updates' : ''),
     baseUrl: `${req.protocol}://${req.get('host')}/api/v1`,
     features: [
       'JWT Authentication',
-      'Real-time WebSocket Updates', 
       'Comprehensive Job Management',
       'Template System',
-      'Time-series Metrics'
+      'Time-series Metrics',
+      ...(wsServer ? ['Real-time WebSocket Updates'] : ['Database-based Updates'])
     ],
-    websocket: {
-      endpoint: `${req.protocol === 'https' ? 'wss' : 'ws'}://${req.get('host')}/socket.io/`,
-      authentication: {
-        method: 'JWT Token',
-        description: 'Include JWT token in auth.token or Authorization header',
-        example: "socket.auth = { token: 'your-jwt-token' }"
-      },
-      events: {
-        outgoing: {
-          'job-status-update': 'Detailed job status with progress and metrics',
-          'job-update': 'Real-time job status changes',
-          'active-jobs': 'List of user\'s active jobs',
-          'connected': 'WebSocket connection confirmation'
+    ...(wsServer && {
+      websocket: {
+        endpoint: `${req.protocol === 'https' ? 'wss' : 'ws'}://${req.get('host')}/socket.io/`,
+        authentication: {
+          method: 'JWT Token',
+          description: 'Include JWT token in auth.token or Authorization header',
+          example: "socket.auth = { token: 'your-jwt-token' }"
         },
-        incoming: {
-          'subscribe-job': 'Subscribe to specific job updates (jobId)',
-          'unsubscribe-job': 'Unsubscribe from job updates (jobId)',
-          'get-job-status': 'Request current job status (jobId)',
-          'get-active-jobs': 'Request list of active jobs'
+        events: {
+          outgoing: {
+            'job-status-update': 'Detailed job status with progress and metrics',
+            'job-update': 'Real-time job status changes',
+            'active-jobs': 'List of user\'s active jobs',
+            'connected': 'WebSocket connection confirmation'
+          },
+          incoming: {
+            'subscribe-job': 'Subscribe to specific job updates (jobId)',
+            'unsubscribe-job': 'Unsubscribe from job updates (jobId)',
+            'get-job-status': 'Request current job status (jobId)',
+            'get-active-jobs': 'Request list of active jobs'
+          }
         }
-      },
-      examples: {
-        connect: `
-const socket = io('${req.protocol === 'https' ? 'wss' : 'ws'}://${req.get('host')}', {
-  auth: { token: 'your-jwt-token' }
-});`,
-        subscribe: `
-socket.emit('subscribe-job', 'job-uuid-here');
-socket.on('job-status-update', (data) => {
-  console.log('Job update:', data.status, data.progress + '%');
-});`
       }
-    },
+    }),
     documentation: {
       postman: 'Import the endpoints below into Postman for testing',
       curl: 'Use curl commands as shown in examples',
       swagger: 'OpenAPI 3.0 specification available on request'
     },
     endpoints: {
-      // ... existing endpoint documentation
       system: {
         health: {
           method: 'GET',
           path: '/api/health',
-          description: 'Check API and service health status including WebSocket',
-          authentication: false,
-          response: 'Includes WebSocket connection statistics'
+          description: 'Check API and service health status',
+          authentication: false
         }
       },
-      // ... rest of existing documentation
+      auth: {
+        register: {
+          method: 'POST',
+          path: '/api/v1/auth/register',
+          description: 'Register new user account',
+          authentication: false,
+          body: ['email', 'username', 'password', 'firstName', 'lastName', 'organization?']
+        },
+        login: {
+          method: 'POST', 
+          path: '/api/v1/auth/login',
+          description: 'Login and get JWT token',
+          authentication: false,
+          body: ['email', 'password']
+        },
+        profile: {
+          method: 'GET',
+          path: '/api/v1/auth/profile',
+          description: 'Get user profile and statistics',
+          authentication: true
+        }
+      },
+      simulations: {
+        create: {
+          method: 'POST',
+          path: '/api/v1/simulations',
+          description: 'Create new simulation job',
+          authentication: true,
+          body: ['name', 'topologyId', 'workloadId', 'simulationTime?', 'numComputeNodes?', 'workType?']
+        },
+        list: {
+          method: 'GET',
+          path: '/api/v1/simulations',
+          description: 'List user simulation jobs with pagination',
+          authentication: true,
+          query: ['page?', 'limit?', 'status?', 'sortBy?', 'sortOrder?']
+        },
+        details: {
+          method: 'GET',
+          path: '/api/v1/simulations/:id',
+          description: 'Get detailed job information with metrics and logs',
+          authentication: true
+        },
+        cancel: {
+          method: 'DELETE',
+          path: '/api/v1/simulations/:id',
+          description: 'Cancel running or queued simulation job',
+          authentication: true
+        },
+        topologies: {
+          method: 'GET',
+          path: '/api/v1/simulations/templates/topologies',
+          description: 'Get available network topology templates',
+          authentication: true
+        },
+        workloads: {
+          method: 'GET',
+          path: '/api/v1/simulations/templates/workloads', 
+          description: 'Get available workload pattern templates',
+          authentication: true
+        }
+      }
     }
   });
 });
 
-// API status endpoint with WebSocket stats
+// API status endpoint
 app.get('/api/v1/status', async (req, res) => {
   try {
     const memoryUsage = process.memoryUsage();
@@ -241,8 +310,7 @@ app.get('/api/v1/status', async (req, res) => {
   }
 });
 
-// ===== EXISTING API ROUTES =====
-// Auth Routes
+// ===== AUTH ROUTES =====
 app.post('/api/v1/auth/register', authRateLimit, authController.register);
 app.post('/api/v1/auth/login', authRateLimit, authController.login);
 app.get('/api/v1/auth/profile', authenticateToken, authController.getProfile);
@@ -251,7 +319,7 @@ app.post('/api/v1/auth/logout', authenticateToken, (req, res) => {
   console.log('🚪 User logged out:', (req as any).user?.email);
   res.status(200).json({
     message: 'Logout successful',
-    note: 'Please remove the token from client storage and disconnect WebSocket'
+    note: 'Please remove the token from client storage' + (wsServer ? ' and disconnect WebSocket' : '')
   });
 });
 
@@ -271,100 +339,14 @@ app.get('/api/v1/auth/test', (req, res) => {
   });
 });
 
-// Simulation Routes (all require auth)
-app.use('/api/v1/simulations', authenticateToken);
-
-app.get('/api/v1/simulations/templates/topologies', simulationController.getTopologyTemplates);
-app.get('/api/v1/simulations/templates/workloads', simulationController.getWorkloadPatterns);
-
-// Enhanced simulation routes with WebSocket integration
-app.post('/api/v1/simulations', async (req, res) => {
-  // Call original controller
-  await simulationController.createSimulation(req, res);
-  
-  // If job was created successfully, notify via WebSocket
-  if (res.statusCode === 201 && wsServer) {
-    const userId = (req as any).user?.userId;
-    const responseData = (res as any).locals?.jobData;
-    
-    if (userId && responseData) {
-      // Notify user of new job creation
-      wsServer.broadcastJobUpdate({
-        jobId: responseData.id,
-        userId,
-        status: 'queued',
-        message: 'Job created and queued for processing'
-      });
-    }
-  }
-});
-
-app.get('/api/v1/simulations', simulationController.getSimulations);
-app.get('/api/v1/simulations/:id', simulationController.getSimulationById);
-app.delete('/api/v1/simulations/:id', async (req, res) => {
-  const jobId = req.params.id;
-  const userId = (req as any).user?.userId;
-  
-  // Call original controller
-  await simulationController.cancelSimulation(req, res);
-  
-  // If cancellation was successful, notify via WebSocket
-  if (res.statusCode === 200 && wsServer && userId) {
-    wsServer.notifyJobStatusChange(jobId, 'cancelled', userId);
-  }
-});
-
-// Simulation test route
-app.get('/api/v1/simulations/test', (req, res) => {
-  res.json({
-    message: 'Simulation routes are working!',
-    timestamp: new Date().toISOString(),
-    user: (req as any).user || 'No user authenticated',
-    websocketEnabled: !!wsServer,
-    realTimeFeatures: !!wsServer ? [
-      'Live job progress updates',
-      'Real-time status notifications',
-      'Active job monitoring'
-    ] : ['WebSocket not available'],
-    availableRoutes: [
-      'GET /api/v1/simulations/templates/topologies',
-      'GET /api/v1/simulations/templates/workloads',
-      'POST /api/v1/simulations',
-      'GET /api/v1/simulations',
-      'GET /api/v1/simulations/:id',
-      'DELETE /api/v1/simulations/:id'
-    ]
-  });
-});
-
-console.log('✅ All routes configured with WebSocket integration');
-
-// 404 handler for API routes
-app.use('/api/*', (req, res) => {
-  console.log(`❌ 404 - API route not found: ${req.method} ${req.path}`);
-  res.status(404).json({ 
-    error: 'API endpoint not found',
-    method: req.method,
-    path: req.path,
-    availableEndpoints: [
-      'GET /api/health',
-      'GET /api/docs',
-      'POST /api/v1/auth/register',
-      'POST /api/v1/auth/login',
-      'GET /api/v1/auth/profile',
-      'POST /api/v1/simulations',
-      'GET /api/v1/simulations',
-      'WebSocket: /socket.io/'
-    ]
-  });
-});
+console.log('✅ All routes configured' + (wsServer ? ' with WebSocket integration' : ''));
 
 // General 404 handler
 app.use((req, res) => {
   console.log(`❌ 404 - Route not found: ${req.method} ${req.path}`);
   res.status(404).json({ 
     error: 'Route not found',
-    suggestion: 'Visit /api/docs for API documentation or connect to /socket.io/ for WebSocket' 
+    suggestion: 'Visit /api/docs for API documentation' + (wsServer ? ' or /websocket-test for WebSocket testing' : '')
   });
 });
 
@@ -381,29 +363,195 @@ app.use((err: any, req: any, res: any, next: any) => {
   });
 });
 
-// Start HTTP server with WebSocket support
+// Start HTTP server with optional WebSocket support
 const httpServer = server.listen(port, '0.0.0.0', () => {
-  console.log(`✅ HPC Simulation API with WebSocket running on port ${port}`);
+  console.log(`✅ HPC Simulation API running on port ${port}`);
   console.log(`📚 Health check: http://localhost:${port}/api/health`);
   console.log(`🏠 Home: http://localhost:${port}/`);
   console.log(`📖 API Docs: http://localhost:${port}/api/docs`);
   console.log(`🔐 Auth endpoints: http://localhost:${port}/api/v1/auth/*`);
   console.log(`🧪 Simulation endpoints: http://localhost:${port}/api/v1/simulations/*`);
-  console.log(`🔗 WebSocket endpoint: ws://localhost:${port}/socket.io/`);
   
-  // Initialize WebSocket server after HTTP server starts
-  wsServer = new WebSocketServer(httpServer);
-  console.log(`🔗 WebSocket server ready for real-time job monitoring`);
+  // Initialize WebSocket server if available
+  if (WebSocketServer) {
+    try {
+      wsServer = new WebSocketServer(httpServer);
+      console.log(`🔗 WebSocket server ready: ws://localhost:${port}/socket.io/`);
+      console.log(`🎮 WebSocket test client: http://localhost:${port}/websocket-test`);
+    } catch (wsError) {
+      console.warn('⚠️ Failed to initialize WebSocket server:', wsError);
+      console.info('🔄 API will continue without real-time updates');
+    }
+  } else {
+    console.info('🔄 Running without WebSocket support (dependencies not available)');
+  }
 });
 
-// Graceful shutdown with WebSocket cleanup
+// ===== SIMULATION ROUTES =====
+// All simulation routes require authentication
+app.use('/api/v1/simulations', authenticateToken);
+
+app.get('/api/v1/simulations/templates/topologies', simulationController.getTopologyTemplates);
+app.get('/api/v1/simulations/templates/workloads', simulationController.getWorkloadPatterns);
+
+// Enhanced simulation routes with optional WebSocket integration
+app.post('/api/v1/simulations', async (req, res) => {
+  // Store response data for WebSocket notification
+  const originalJson = res.json;
+  let jobData: any = null;
+  
+  res.json = function(data) {
+    jobData = data;
+    return originalJson.call(this, data);
+  };
+  
+  // Call original controller
+  await simulationController.createSimulation(req, res);
+  
+  // If job was created successfully, notify via WebSocket
+  if (res.statusCode === 201 && wsServer && jobData?.job) {
+    const userId = (req as any).user?.userId;
+    try {
+      wsServer.broadcastJobUpdate({
+        jobId: jobData.job.id,
+        userId,
+        status: 'queued',
+        message: 'Job created and queued for processing'
+      });
+    } catch (wsError) {
+      console.warn('⚠️ WebSocket notification failed:', wsError);
+    }
+  }
+});
+
+app.get('/api/v1/simulations', simulationController.getSimulations);
+app.get('/api/v1/simulations/:id', simulationController.getSimulationById);
+
+app.delete('/api/v1/simulations/:id', async (req, res) => {
+  const jobId = req.params.id;
+  const userId = (req as any).user?.userId;
+  
+  // Call original controller
+  await simulationController.cancelSimulation(req, res);
+  
+  // If cancellation was successful, notify via WebSocket
+  if (res.statusCode === 200 && wsServer && userId) {
+    try {
+      wsServer.notifyJobStatusChange(jobId, 'cancelled', userId);
+    } catch (wsError) {
+      console.warn('⚠️ WebSocket notification failed:', wsError);
+    }
+  }
+});
+
+// Simulation test route
+app.get('/api/v1/simulations/test', (req, res) => {
+  res.json({
+    message: 'Simulation routes are working!',
+    timestamp: new Date().toISOString(),
+    user: (req as any).user || 'No user authenticated',
+    websocketEnabled: !!wsServer,
+    realTimeFeatures: wsServer ? [
+      'Live job progress updates',
+      'Real-time status notifications',
+      'Active job monitoring'
+    ] : ['Database-based polling updates'],
+    availableRoutes: [
+      'GET /api/v1/simulations/templates/topologies',
+      'GET /api/v1/simulations/templates/workloads',
+      'POST /api/v1/simulations',
+      'GET /api/v1/simulations',
+      'GET /api/v1/simulations/:id',
+      'DELETE /api/v1/simulations/:id'
+    ]
+  });
+});
+
+console.log('✅ All routes configured' + (wsServer ? ' with WebSocket integration' : ''));
+
+// Serve WebSocket test client (optional)
+if (wsServer) {
+  app.get('/websocket-test', (req, res) => {
+    // Serve the client.html file if it exists
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const clientPath = path.join(__dirname, '..', 'client.html');
+      
+      if (fs.existsSync(clientPath)) {
+        res.sendFile(clientPath);
+      } else {
+        res.json({
+          message: 'WebSocket test client not found',
+          info: 'WebSocket endpoint available at /socket.io/',
+          documentation: '/api/docs'
+        });
+      }
+    } catch (error) {
+      res.json({
+        message: 'WebSocket is enabled',
+        endpoint: '/socket.io/',
+        authentication: 'JWT token required',
+        documentation: '/api/docs'
+      });
+    }
+  });
+}
+
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+  console.log(`❌ 404 - API route not found: ${req.method} ${req.path}`);
+  res.status(404).json({ 
+    error: 'API endpoint not found',
+    method: req.method,
+    path: req.path,
+    availableEndpoints: [
+      'GET /api/health',
+      'GET /api/docs',
+      'POST /api/v1/auth/register',
+      'POST /api/v1/auth/login',
+      'GET /api/v1/auth/profile',
+      'POST /api/v1/simulations',
+      'GET /api/v1/simulations',
+      ...(wsServer ? ['WebSocket: /socket.io/'] : [])
+    ]
+  });
+});
+
+// General 404 handler
+app.use((req, res) => {
+  console.log(`❌ 404 - Route not found: ${req.method} ${req.path}`);
+  res.status(404).json({ 
+    error: 'Route not found',
+    suggestion: 'Visit /api/docs for API documentation' + (wsServer ? ' or /websocket-test for WebSocket testing' : '')
+  });
+});
+
+// Global error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('💥 Server error:', err);
+  
+  const isDevelopment = process.env.NODE_ENV !== 'production';
+  
+  res.status(err.status || 500).json({
+    error: 'Internal server error',
+    message: isDevelopment ? err.message : 'Something went wrong',
+    ...(isDevelopment && { stack: err.stack })
+  });
+});
+
+// Graceful shutdown with optional WebSocket cleanup
 const gracefulShutdown = async (signal: string) => {
   console.log(`🛑 ${signal} received, shutting down gracefully`);
   
-  // Close WebSocket connections
+  // Close WebSocket connections if available
   if (wsServer) {
     console.log('🔗 Closing WebSocket connections...');
-    // WebSocket cleanup handled by Socket.IO
+    try {
+      // WebSocket cleanup handled by Socket.IO
+    } catch (wsError) {
+      console.warn('⚠️ WebSocket cleanup error:', wsError);
+    }
   }
   
   httpServer.close(async () => {
@@ -427,6 +575,6 @@ const gracefulShutdown = async (signal: string) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Export WebSocket server for use by worker notifications
+// Export WebSocket server for use by worker notifications (optional)
 export { wsServer };
 export default app;

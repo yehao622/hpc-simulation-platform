@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Mock Simulation Worker for HPC Platform
-Processes simulation jobs from Redis queue and generates realistic results
+Enhanced Simulation Worker with WebSocket Real-time Updates
+Sends live progress updates to connected clients via Redis pub/sub
 """
 
 import os
@@ -9,18 +9,16 @@ import json
 import time
 import random
 import logging
-import asyncio
 import psycopg2
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
+from datetime import datetime
 
-# Import redis with fallback
+# Redis for real-time updates
 try:
     import redis
+    REDIS_AVAILABLE = True
 except ImportError:
-    print("⚠️ Redis not available, running in standalone mode")
-    redis = None
+    REDIS_AVAILABLE = False
+    print("⚠️ Redis not available, real-time updates disabled")
 
 # Configure logging
 logging.basicConfig(
@@ -29,338 +27,348 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-@dataclass
-class SimulationJob:
-    job_id: str
-    user_id: int
-    name: str
-    simulation_time: float
-    network_config: Dict[str, Any]
-    workload_config: Dict[str, Any]
-    topology_params: Dict[str, Any]
-    workload_params: Dict[str, Any]
-
-class MockSimulationWorker:
+class RealtimeSimulationWorker:
     def __init__(self):
-        self.worker_id = f"worker-{os.getpid()}-{int(time.time())}"
-        self.redis_client = None
+        self.worker_id = f"realtime-worker-{os.getpid()}-{int(time.time())}"
         self.db_connection = None
+        self.redis_client = None
+        self.redis_publisher = None
         self.running = False
         
-    async def initialize(self):
-        """Initialize Redis and database connections"""
+    def initialize(self):
+        """Initialize database and Redis connections"""
         try:
-            # Connect to Redis
-            redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
-            self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
-            self.redis_client.ping()
-            logger.info(f"✅ Connected to Redis: {redis_url}")
-            
-            # Connect to PostgreSQL
-            db_url = os.getenv('DATABASE_URL', 'postgresql://hpc_user:hpc_password@localhost:5432/hpc_simulation')
+            # Database connection (required)
+            db_url = os.getenv('DATABASE_URL', 'postgresql://hpc_user:hpc_password@postgres:5432/hpc_simulation')
             self.db_connection = psycopg2.connect(db_url)
             self.db_connection.autocommit = True
             logger.info(f"✅ Connected to PostgreSQL")
             
-            logger.info(f"🔧 Worker initialized: {self.worker_id}")
+            # Redis connection (optional for real-time updates)
+            if REDIS_AVAILABLE:
+                try:
+                    redis_url = os.getenv('REDIS_URL', 'redis://redis:6379')
+                    self.redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
+                    self.redis_client.ping()
+                    
+                    # Separate client for publishing to avoid blocking
+                    self.redis_publisher = redis.Redis.from_url(redis_url, decode_responses=True)
+                    self.redis_publisher.ping()
+                    
+                    logger.info(f"✅ Connected to Redis for real-time updates")
+                except Exception as redis_error:
+                    logger.warning(f"⚠️ Redis connection failed: {redis_error}")
+                    logger.info("📦 Real-time updates disabled")
+                    self.redis_client = None
+                    self.redis_publisher = None
+            
+            logger.info(f"🔧 Realtime Worker initialized: {self.worker_id}")
             return True
             
         except Exception as e:
             logger.error(f"💥 Failed to initialize worker: {e}")
             return False
     
-    async def process_queue(self):
-        """Main queue processing loop"""
+    def send_realtime_update(self, job_id, status, progress=None, message=None, user_id=None, results=None):
+        """Send real-time update via Redis pub/sub"""
+        if not self.redis_publisher:
+            return
+        
+        try:
+            update = {
+                'jobId': job_id,
+                'userId': user_id,
+                'status': status,
+                'progress': progress,
+                'message': message,
+                'results': results,
+                'workerId': self.worker_id,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Publish to job-updates channel for WebSocket server
+            self.redis_publisher.publish('job-updates', json.dumps(update))
+            logger.info(f"📡 Sent real-time update for job {job_id}: {status} ({progress}%)")
+            
+        except Exception as e:
+            logger.error(f"💥 Failed to send real-time update: {e}")
+    
+    def process_queue(self):
+        """Main queue processing loop with real-time updates"""
         self.running = True
-        logger.info("🚀 Starting queue processing...")
+        logger.info("🚀 Starting realtime queue processing...")
         
         while self.running:
             try:
-                # Block for up to 5 seconds waiting for a job
-                job_data = self.redis_client.brpop('simulation_queue', timeout=5)
+                # Get job from database queue
+                job_id = self.get_job_from_database()
                 
-                if job_data:
-                    queue_name, job_json = job_data
-                    job_info = json.loads(job_json)
-                    await self.process_simulation_job(job_info['jobId'])
+                if job_id:
+                    logger.info(f"🎯 Processing job: {job_id}")
+                    self.process_job(job_id)
                 else:
-                    # No jobs available, short sleep
-                    await asyncio.sleep(1)
-                    
+                    logger.info("😴 No jobs found, sleeping...")
+                    time.sleep(5)
+                
             except KeyboardInterrupt:
                 logger.info("🛑 Received shutdown signal")
                 self.running = False
                 break
             except Exception as e:
                 logger.error(f"💥 Queue processing error: {e}")
-                await asyncio.sleep(5)  # Wait before retrying
+                time.sleep(10)
     
-    async def process_simulation_job(self, job_id: str):
-        """Process a single simulation job"""
+    def get_job_from_database(self):
+        """Get next job from database queue"""
         try:
-            logger.info(f"🎯 Processing job: {job_id}")
+            cursor = self.db_connection.cursor()
             
-            # Fetch job details from database
-            job = await self.fetch_job_details(job_id)
-            if not job:
-                logger.error(f"❌ Job not found: {job_id}")
-                return
+            # Get the oldest unclaimed job
+            cursor.execute("""
+                UPDATE job_queue 
+                SET claimed_at = NOW(), worker_id = %s
+                WHERE id = (
+                    SELECT id FROM job_queue 
+                    WHERE claimed_at IS NULL 
+                    ORDER BY queued_at ASC 
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING job_id
+            """, (self.worker_id,))
             
-            # Update job status to running
-            await self.update_job_status(job_id, 'running', started_at=datetime.now())
-            await self.add_job_log(job_id, 'INFO', f'Simulation started by worker {self.worker_id}', 'worker')
-            
-            # Run mock simulation
-            results = await self.run_mock_simulation(job)
-            
-            # Update job with results
-            await self.update_job_results(job_id, results)
-            await self.update_job_status(job_id, 'completed', completed_at=datetime.now())
-            await self.add_job_log(job_id, 'INFO', 'Simulation completed successfully', 'worker')
-            
-            logger.info(f"✅ Job completed: {job_id}")
+            result = cursor.fetchone()
+            return result[0] if result else None
             
         except Exception as e:
-            logger.error(f"💥 Job processing error for {job_id}: {e}")
-            await self.update_job_status(job_id, 'failed', error_message=str(e), completed_at=datetime.now())
-            await self.add_job_log(job_id, 'ERROR', f'Simulation failed: {str(e)}', 'worker')
+            logger.error(f"💥 Database queue error: {e}")
+            return None
     
-    async def fetch_job_details(self, job_id: str) -> Optional[SimulationJob]:
-        """Fetch job details from database"""
+    def process_job(self, job_id):
+        """Process a simulation job with real-time updates"""
         try:
+            # Get job details and user info
             cursor = self.db_connection.cursor()
             cursor.execute("""
                 SELECT 
-                    sj.id, sj.user_id, sj.name, sj.simulation_time,
-                    sj.num_compute_nodes, sj.num_storage_nodes, sj.num_core_switches,
-                    sj.num_aggr_switches, sj.num_edge_switches, sj.infiniband_bandwidth,
-                    sj.pcie_bandwidth, sj.sas_bandwidth, sj.work_type, sj.data_size_mb,
-                    sj.read_probability, sj.request_rate, sj.custom_parameters,
-                    tt.parameters as topology_params, wp.parameters as workload_params
+                    sj.id, sj.user_id, sj.name, sj.simulation_time, sj.num_compute_nodes, 
+                    sj.work_type, sj.data_size_mb, sj.custom_parameters,
+                    tt.parameters as topology_params, 
+                    wp.parameters as workload_params
                 FROM simulation_jobs sj
                 LEFT JOIN topology_templates tt ON sj.topology_id = tt.id
                 LEFT JOIN workload_patterns wp ON sj.workload_id = wp.id
                 WHERE sj.id = %s AND sj.status = 'queued'
             """, (job_id,))
             
-            row = cursor.fetchone()
-            if not row:
-                return None
-                
-            return SimulationJob(
-                job_id=row[0],
-                user_id=row[1],
-                name=row[2],
-                simulation_time=float(row[3]),
-                network_config={
-                    'compute_nodes': row[4],
-                    'storage_nodes': row[5],
-                    'core_switches': row[6],
-                    'aggr_switches': row[7],
-                    'edge_switches': row[8],
-                    'infiniband_bw': float(row[9]),
-                    'pcie_bw': float(row[10]),
-                    'sas_bw': float(row[11])
-                },
-                workload_config={
-                    'work_type': row[12],
-                    'data_size_mb': float(row[13]),
-                    'read_probability': float(row[14]),
-                    'request_rate': float(row[15])
-                },
-                topology_params=json.loads(row[17]) if row[17] else {},
-                workload_params=json.loads(row[18]) if row[18] else {}
+            job = cursor.fetchone()
+            if not job:
+                logger.warning(f"❌ Job {job_id} not found or not queued")
+                return
+            
+            # Extract job data
+            job_id = job[0]
+            user_id = job[1]
+            job_name = job[2]
+            sim_time = float(job[3])
+            compute_nodes = job[4]
+            work_type = job[5]
+            data_size = float(job[6])
+            
+            # Handle JSON fields safely
+            custom_params = self.safe_json_parse(job[7], {})
+            topology_params = self.safe_json_parse(job[8], {})
+            workload_params = self.safe_json_parse(job[9], {})
+            
+            logger.info(f"📊 Job details: {job_name}, {sim_time}s, {compute_nodes} nodes, {work_type} workload")
+            
+            # Update status to running and send real-time update
+            cursor.execute("""
+                UPDATE simulation_jobs 
+                SET status = 'running', worker_id = %s, started_at = NOW()
+                WHERE id = %s
+            """, (self.worker_id, job_id))
+            
+            cursor.execute("""
+                INSERT INTO job_logs (job_id, log_level, message, component)
+                VALUES (%s, 'INFO', %s, 'worker')
+            """, (job_id, f'Job started by {self.worker_id}'))
+            
+            # Send real-time update: Job started
+            self.send_realtime_update(
+                job_id, 'running', 0, 
+                f'Simulation started: {job_name}', 
+                user_id
             )
             
+            # Run simulation with progress updates
+            results = self.run_simulation_with_updates(job_id, job_name, sim_time, compute_nodes, work_type, data_size, user_id)
+            
+            # Update job with results
+            cursor.execute("""
+                UPDATE simulation_jobs 
+                SET status = 'completed', 
+                    completed_at = NOW(),
+                    total_throughput = %s,
+                    average_latency = %s,
+                    max_queue_length = %s
+                WHERE id = %s
+            """, (results['throughput'], results['latency'], results['queue_length'], job_id))
+            
+            # Add completion log
+            cursor.execute("""
+                INSERT INTO job_logs (job_id, log_level, message, component)
+                VALUES (%s, 'INFO', %s, 'worker')
+            """, (job_id, f'Simulation completed. Throughput: {results["throughput"]:.2f} MB/s, Latency: {results["latency"]:.2f} ms'))
+            
+            # Remove from queue
+            cursor.execute("DELETE FROM job_queue WHERE job_id = %s", (job_id,))
+            
+            # Send final real-time update: Job completed
+            self.send_realtime_update(
+                job_id, 'completed', 100, 
+                f'Simulation completed successfully', 
+                user_id, results
+            )
+            
+            logger.info(f"✅ Job {job_id} completed successfully - Throughput: {results['throughput']:.2f} MB/s")
+            
         except Exception as e:
-            logger.error(f"💥 Failed to fetch job details: {e}")
-            return None
+            logger.error(f"💥 Job processing error for {job_id}: {e}")
+            import traceback
+            logger.error(f"📍 Full traceback: {traceback.format_exc()}")
+            
+            try:
+                cursor.execute("""
+                    UPDATE simulation_jobs 
+                    SET status = 'failed', completed_at = NOW(), error_message = %s
+                    WHERE id = %s
+                """, (str(e), job_id))
+                cursor.execute("DELETE FROM job_queue WHERE job_id = %s", (job_id,))
+                cursor.execute("""
+                    INSERT INTO job_logs (job_id, log_level, message, component)
+                    VALUES (%s, 'ERROR', %s, 'worker')
+                """, (job_id, f'Job failed: {str(e)}'))
+                
+                # Send real-time update: Job failed
+                self.send_realtime_update(
+                    job_id, 'failed', None, 
+                    f'Simulation failed: {str(e)}', 
+                    user_id
+                )
+                
+            except Exception as cleanup_error:
+                logger.error(f"💥 Failed to update failed job status: {cleanup_error}")
     
-    async def run_mock_simulation(self, job: SimulationJob) -> Dict[str, Any]:
-        """Run mock simulation and generate realistic results"""
-        logger.info(f"🧮 Running mock simulation for {job.simulation_time}s")
+    def run_simulation_with_updates(self, job_id, job_name, sim_time, compute_nodes, work_type, data_size, user_id):
+        """Run simulation with real-time progress updates"""
+        logger.info(f"🧮 Running simulation: {job_name} for {sim_time} seconds")
         
-        # Generate realistic metrics over time
-        metrics = []
-        logs = []
+        cursor = self.db_connection.cursor()
         
-        # Simulation progress
-        steps = int(job.simulation_time * 10)  # 10 data points per second
-        step_duration = job.simulation_time / steps
+        # Simulation parameters
+        steps = max(10, int(sim_time * 2))  # At least 10 steps, 2 per second
+        step_duration = sim_time / steps
         
-        base_throughput = job.network_config['compute_nodes'] * 0.8  # MB/s per node
-        base_latency = 0.05  # 50ms base latency
+        # Generate realistic results based on parameters
+        base_throughput = compute_nodes * 0.8  # MB/s per node
+        base_latency = 20.0  # Base latency in ms
+        
+        # Workload type effects
+        if work_type == 'read':
+            throughput_multiplier = 1.2
+            latency_multiplier = 0.8
+        elif work_type == 'write':
+            throughput_multiplier = 0.8
+            latency_multiplier = 1.3
+        else:  # mixed
+            throughput_multiplier = 1.0
+            latency_multiplier = 1.0
+        
         max_queue_length = 0
+        total_throughput = 0
+        total_latency = 0
         
+        # Run simulation steps with progress updates
         for step in range(steps):
             current_time = step * step_duration
+            progress = int((step + 1) / steps * 100)
             
-            # Add some randomness and trends
+            # Add some randomness
             throughput_variation = random.uniform(0.8, 1.2)
-            latency_variation = random.uniform(0.9, 1.3)
+            latency_variation = random.uniform(0.9, 1.1)
             
-            # Network congestion effects
-            congestion_factor = 1.0
-            if job.workload_config['work_type'] == 'write':
-                congestion_factor = 1.2
-            elif job.workload_config['work_type'] == 'mixed':
-                congestion_factor = 1.1
+            # Calculate current metrics
+            current_throughput = base_throughput * throughput_multiplier * throughput_variation
+            current_latency = base_latency * latency_multiplier * latency_variation
+            queue_length = max(0, int(random.gauss(compute_nodes / 4, 2)))
             
-            current_throughput = base_throughput * throughput_variation / congestion_factor
-            current_latency = base_latency * latency_variation * congestion_factor
-            
-            # Queue length simulation
-            queue_length = max(0, int(random.gauss(job.network_config['compute_nodes'] / 4, 2)))
             max_queue_length = max(max_queue_length, queue_length)
+            total_throughput += current_throughput
+            total_latency += current_latency
             
-            # Store metrics
-            metrics.extend([
-                {
-                    'metric_type': 'throughput',
-                    'component_type': 'network',
-                    'component_id': 'aggregate',
-                    'timestamp_sec': current_time,
-                    'value': current_throughput,
-                    'unit': 'MB/s'
-                },
-                {
-                    'metric_type': 'latency',
-                    'component_type': 'network',
-                    'component_id': 'aggregate',
-                    'timestamp_sec': current_time,
-                    'value': current_latency,
-                    'unit': 'ms'
-                },
-                {
-                    'metric_type': 'queue_length',
-                    'component_type': 'switch',
-                    'component_id': 'core',
-                    'timestamp_sec': current_time,
-                    'value': queue_length,
-                    'unit': 'count'
-                }
-            ])
+            # Store metrics every few steps
+            if step % max(1, steps // 15) == 0:  # Store ~15 data points
+                cursor.execute("""
+                    INSERT INTO simulation_metrics 
+                    (job_id, metric_type, component_type, timestamp_sec, value, unit)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (job_id, 'throughput', 'network', current_time, current_throughput, 'MB/s'))
+                
+                cursor.execute("""
+                    INSERT INTO simulation_metrics 
+                    (job_id, metric_type, component_type, timestamp_sec, value, unit)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (job_id, 'latency', 'network', current_time, current_latency, 'ms'))
+                
+                # Log progress
+                logger.info(f"📈 Job {job_id} progress: {progress}% - Throughput: {current_throughput:.2f} MB/s")
+                
+                cursor.execute("""
+                    INSERT INTO job_logs (job_id, log_level, message, component, simulation_time)
+                    VALUES (%s, 'INFO', %s, 'simulator', %s)
+                """, (job_id, f'Progress: {progress}% - Throughput: {current_throughput:.2f} MB/s', current_time))
+                
+                # Send real-time progress update
+                self.send_realtime_update(
+                    job_id, 'running', progress,
+                    f'Simulation progress: {progress}% - Current throughput: {current_throughput:.2f} MB/s',
+                    user_id
+                )
             
-            # Add some log messages
-            if step % 20 == 0:  # Every 2 seconds
-                logs.append({
-                    'log_level': 'INFO',
-                    'message': f'Simulation progress: {(step/steps)*100:.1f}% complete',
-                    'component': 'simulator',
-                    'simulation_time': current_time
-                })
-            
-            # Simulate processing time (much faster than real simulation)
-            await asyncio.sleep(0.01)  # 10ms per step
+            # Sleep to simulate processing time
+            time.sleep(max(0.1, step_duration))
         
-        # Store metrics and logs in database
-        await self.store_metrics(job.job_id, metrics)
-        await self.store_logs(job.job_id, logs)
-        
-        # Calculate final results
-        total_throughput = sum(m['value'] for m in metrics if m['metric_type'] == 'throughput') / len([m for m in metrics if m['metric_type'] == 'throughput'])
-        average_latency = sum(m['value'] for m in metrics if m['metric_type'] == 'latency') / len([m for m in metrics if m['metric_type'] == 'latency'])
+        # Calculate final averages
+        avg_throughput = total_throughput / steps
+        avg_latency = total_latency / steps
         
         results = {
-            'total_throughput': round(total_throughput, 6),
-            'average_latency': round(average_latency, 6),
-            'max_queue_length': max_queue_length
+            'throughput': round(avg_throughput, 6),
+            'latency': round(avg_latency, 6),
+            'queue_length': max_queue_length
         }
         
         logger.info(f"📊 Simulation results: {results}")
         return results
     
-    async def store_metrics(self, job_id: str, metrics: list):
-        """Store simulation metrics in database"""
+    def safe_json_parse(self, data, default):
+        """Safely parse JSON data handling both string and dict types"""
         try:
-            cursor = self.db_connection.cursor()
-            for metric in metrics:
-                cursor.execute("""
-                    INSERT INTO simulation_metrics 
-                    (job_id, metric_type, component_type, component_id, timestamp_sec, value, unit)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    job_id, metric['metric_type'], metric['component_type'],
-                    metric['component_id'], metric['timestamp_sec'], metric['value'], metric['unit']
-                ))
-        except Exception as e:
-            logger.error(f"💥 Failed to store metrics: {e}")
+            if data is None:
+                return default
+            if isinstance(data, str):
+                return json.loads(data)
+            elif isinstance(data, dict):
+                return data
+            else:
+                return default
+        except:
+            return default
     
-    async def store_logs(self, job_id: str, logs: list):
-        """Store simulation logs in database"""
-        try:
-            cursor = self.db_connection.cursor()
-            for log in logs:
-                cursor.execute("""
-                    INSERT INTO job_logs 
-                    (job_id, log_level, message, component, simulation_time)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    job_id, log['log_level'], log['message'], 
-                    log['component'], log['simulation_time']
-                ))
-        except Exception as e:
-            logger.error(f"💥 Failed to store logs: {e}")
-    
-    async def update_job_status(self, job_id: str, status: str, **kwargs):
-        """Update job status in database"""
-        try:
-            cursor = self.db_connection.cursor()
-            
-            set_clauses = ['status = %s', 'worker_id = %s']
-            values = [status, self.worker_id]
-            
-            if 'started_at' in kwargs:
-                set_clauses.append('started_at = %s')
-                values.append(kwargs['started_at'])
-            
-            if 'completed_at' in kwargs:
-                set_clauses.append('completed_at = %s')
-                values.append(kwargs['completed_at'])
-            
-            if 'error_message' in kwargs:
-                set_clauses.append('error_message = %s')
-                values.append(kwargs['error_message'])
-            
-            values.append(job_id)
-            
-            query = f"UPDATE simulation_jobs SET {', '.join(set_clauses)} WHERE id = %s"
-            cursor.execute(query, values)
-            
-        except Exception as e:
-            logger.error(f"💥 Failed to update job status: {e}")
-    
-    async def update_job_results(self, job_id: str, results: Dict[str, Any]):
-        """Update job results in database"""
-        try:
-            cursor = self.db_connection.cursor()
-            cursor.execute("""
-                UPDATE simulation_jobs 
-                SET total_throughput = %s, average_latency = %s, max_queue_length = %s
-                WHERE id = %s
-            """, (
-                results['total_throughput'],
-                results['average_latency'],
-                results['max_queue_length'],
-                job_id
-            ))
-        except Exception as e:
-            logger.error(f"💥 Failed to update job results: {e}")
-    
-    async def add_job_log(self, job_id: str, level: str, message: str, component: str):
-        """Add log entry for job"""
-        try:
-            cursor = self.db_connection.cursor()
-            cursor.execute("""
-                INSERT INTO job_logs (job_id, log_level, message, component)
-                VALUES (%s, %s, %s, %s)
-            """, (job_id, level, message, component))
-        except Exception as e:
-            logger.error(f"💥 Failed to add job log: {e}")
-    
-    async def shutdown(self):
-        """Graceful shutdown"""
-        logger.info("🛑 Shutting down worker...")
+    def shutdown(self):
+        """Shutdown worker with cleanup"""
+        logger.info("🛑 Shutting down realtime worker...")
         self.running = False
         
         if self.db_connection:
@@ -368,20 +376,25 @@ class MockSimulationWorker:
         
         if self.redis_client:
             self.redis_client.close()
+        
+        if self.redis_publisher:
+            self.redis_publisher.close()
 
-async def main():
-    worker = MockSimulationWorker()
+def main():
+    logger.info("🚀 Starting Realtime Simulation Worker with WebSocket Updates")
     
-    if not await worker.initialize():
+    worker = RealtimeSimulationWorker()
+    
+    if not worker.initialize():
         logger.error("💥 Failed to initialize worker")
         return
     
     try:
-        await worker.process_queue()
+        worker.process_queue()
     except KeyboardInterrupt:
         logger.info("🛑 Received shutdown signal")
     finally:
-        await worker.shutdown()
+        worker.shutdown()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

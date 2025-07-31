@@ -2,153 +2,153 @@
 
 A scalable, cloud-native platform for running High-Performance Computing network simulations, built on top of OMNeT++ simulation framework.
 
-## 🚀 Project Vision
-
-Transform academic HPC simulation tools into production-ready SaaS platform demonstrating:
-- **Microservices Architecture** with RESTful APIs and GraphQL
-- **Cloud-Native Deployment** on AWS with containerization
-- **Modern DevOps Practices** with CI/CD and Infrastructure as Code
-- **Scalable Data Processing** with PostgreSQL and async job queues
-
 ## 🏗️ Architecture Overview
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Client    │────│   API Gateway   │────│ Simulation      │
-│   (React)       │    │  (Node.js +     │    │ Worker          │
-└─────────────────┘    │   GraphQL)      │    │ (Python +       │
+│   API Client    │────│   API Gateway   │────│ Simulation      │
+│  (REST/GraphQL) │    │  (Node.js +     │    │ Worker          │
+└─────────────────┘    │   TypeScript)   │    │ (Python +       │
                        └─────────────────┘    │  OMNeT++)       │
                                 │              └─────────────────┘
                        ┌─────────────────┐               │
                        │   PostgreSQL    │               │
                        │   Database      │───────────────┘
                        └─────────────────┘
+                                │
+                       ┌─────────────────┐
+                       │   Redis Queue   │
+                       │   & Cache       │
+                       └─────────────────┘
 ```
 
-## 🛠️ Technology Stack
+## 📊 Current Capabilities
+🔐 Authentication System
 
-### Backend Services
-- **API Gateway**: Node.js, Express, GraphQL, TypeScript
-- **Simulation Engine**: Python, OMNeT++, Docker containers
-- **Database**: PostgreSQL with time-series optimizations
-- **Message Queue**: Redis/Celery for async job processing
+User Registration: Secure account creation with comprehensive validation
+JWT Login: Token-based authentication with bcrypt password hashing (12 rounds)
+Protected Routes: Middleware-based authorization for all simulation endpoints
+Profile Management: User statistics, job history, and account information
+Security Features: Input validation, rate limiting, SQL injection prevention
 
-### DevOps & Infrastructure  
-- **Containerization**: Docker, Docker Compose
-- **Cloud Platform**: AWS (ECS, RDS, S3, CloudWatch)
-- **CI/CD**: GitHub Actions, automated testing and deployment
-- **Infrastructure as Code**: Terraform
-- **Monitoring**: Prometheus, Grafana
+🚀 Simulation Management
 
-### Development Tools
-- **Build Tools**: Webpack, Babel, ESLint, Prettier
-- **Testing**: Jest, Supertest, pytest
-- **Development**: Docker Compose for local environment
+Template System: Pre-configured network topologies (Fat-tree, Mesh, Custom)
+Workload Patterns: Read-heavy, Write-heavy, Balanced, High-frequency patterns
+Job Submission: Comprehensive validation with topology and workload selection
+Real-time Monitoring: Track job status from submission through completion
+Results Retrieval: Detailed metrics, execution logs, and performance analytics
+Job Operations: List, filter, paginate, view details, and cancel jobs
 
-## 📊 Original Simulation Capabilities
+📈 Analytics & Metrics
 
-Built upon a comprehensive OMNeT++ simulator featuring:
-- **Fat-tree Network Topology** with configurable core/aggregation/edge layers
-- **Storage System Modeling** including OSS/OST with realistic I/O patterns  
-- **Multiple Interconnects**: InfiniBand, PCIe, SAS with accurate performance models
-- **Workload Generation**: Configurable read/write patterns for HPC applications
+Performance Tracking: Throughput, latency, and queue length time-series data
+Job Statistics: User-specific success rates, completion times, and resource usage
+Execution Logs: Structured logging with component-level detail and timestamps
+Historical Analysis: Complete audit trail for debugging and optimization
 
-## 🎯 Development Roadmap
+🏗️ Infrastructure
 
-### Phase 1: Core Platform (Weeks 1-2)
-- [ ] RESTful API design and implementation
-- [ ] Database schema and data models
-- [ ] Basic containerization of simulation engine
-- [ ] Local development environment setup
+Multi-service Architecture: Clean separation of API, worker, and data layers
+Database Integration: PostgreSQL with optimized schema and relationships
+Async Processing: Redis-based job queue with database fallback for reliability
+Health Monitoring: Service status tracking and diagnostic tooling
 
-### Phase 2: Advanced Features (Weeks 3-4)  
-- [ ] GraphQL API for complex queries
-- [ ] Async job processing with status tracking
-- [ ] Results visualization and analytics
-- [ ] User authentication and authorization
-
-### Phase 3: Production Deployment (Weeks 5-6)
-- [ ] AWS infrastructure provisioning
-- [ ] CI/CD pipeline implementation  
-- [ ] Monitoring and logging setup
-- [ ] Performance optimization and scaling
-
-## 🚦 Current Status
-
-🟡 **In Development** - Core platform architecture and API design
-
-## 💼 Professional Skills Demonstrated
-
-This project showcases modern software engineering practices:
-- **Full-Stack Development**: REST/GraphQL APIs, database design, containerization
-- **Cloud Architecture**: AWS services, microservices, scalable infrastructure  
-- **DevOps Practices**: CI/CD, Infrastructure as Code, monitoring
-- **Agile Development**: Feature branches, sprint planning, user stories
-- **Domain Expertise**: HPC systems, network simulation, performance analysis
-
-## 📁 Project Structure
-
-```
-hpc-simulation-platform/
-├── README.md                    # Project overview
-├── docs/                       # Documentation
-│   ├── architecture.md         # System architecture
-│   ├── api-design.md          # API specifications
-│   ├── development-log.md     # Development progress
-│   └── deployment-guide.md    # Deployment instructions
-├── legacy-simulator/          # Original OMNeT++ HPC simulator
-├── api-gateway/              # RESTful API service
-├── simulation-worker/        # Containerized simulation engine
-├── infrastructure/           # Terraform configurations
-├── docker-compose.yml       # Local development environment
-└── .github/                 # CI/CD and issue templates
-```
+---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Docker & Docker Compose
-- Node.js 16+
-- PostgreSQL 14+
+🚀 Quick Start
+Prerequisites
 
-### Local Development
-```bash
-# Clone repository
-git clone https://github.com/yourusername/hpc-simulation-platform.git
+Docker & Docker Compose (latest version)
+Node.js 16+ (for local development)
+Git (for version control)
+
+1. Clone and Setup
+bashgit clone https://github.com/yehao622/hpc-simulation-platform.git
 cd hpc-simulation-platform
 
-# Start development environment
+# Start all services
 docker-compose up -d
 
-# Install API dependencies
-cd api-gateway
-npm install
-npm run dev
-```
+# Check service status
+docker-compose ps
+2. Verify Installation
+bash# API Health Check
+curl http://localhost:3000/api/health
 
-## 🤝 Contributing
+# API Documentation
+open http://localhost:3000/api/docs
+3. Run Comprehensive Test Suite
+bash# Use the provided test script for complete workflow validation
+chmod +x api_test_script.sh
+./api_test_script.sh
 
-This project follows Agile/SCRUM methodology:
-1. Check current sprint goals in [docs/current-status.md](docs/current-status.md)
-2. Create feature branch from `develop`
-3. Follow commit conventions: `feat:`, `fix:`, `docs:`, `refactor:`
-4. Submit PR with detailed description
-5. Ensure all tests pass and code review approval
+# Expected: All tests pass with ✅ indicators
+📚 API Usage Examples
+Complete Authentication Flow
+bash# 1. Register new user
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "researcher@university.edu",
+    "username": "researcher1", 
+    "password": "securepassword123",
+    "firstName": "Jane",
+    "lastName": "Researcher",
+    "organization": "Research University"
+  }'
 
-## 📈 Performance Metrics
+# 2. Login and get JWT token
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "researcher@university.edu",
+    "password": "securepassword123"
+  }'
+# Save the returned JWT token for subsequent requests
 
-Current platform capabilities:
-- **Concurrent Simulations**: Up to 10 parallel jobs
-- **API Response Time**: < 100ms for job submission
-- **Simulation Throughput**: 1000+ network nodes per simulation
-- **Data Processing**: Real-time metrics collection and storage
+# 3. Get user profile and statistics
+curl -X GET http://localhost:3000/api/v1/auth/profile \
+  -H "Authorization: Bearer $JWT_TOKEN"
+Simulation Job Management
+bash# Set your JWT token
+TOKEN="your-jwt-token-here"
 
-## 📋 License
+# 1. Get available topology templates
+curl -X GET http://localhost:3000/api/v1/simulations/templates/topologies \
+  -H "Authorization: Bearer $TOKEN"
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+# 2. Get available workload patterns  
+curl -X GET http://localhost:3000/api/v1/simulations/templates/workloads \
+  -H "Authorization: Bearer $TOKEN"
 
-## 📞 Contact
+# 3. Submit simulation job
+curl -X POST http://localhost:3000/api/v1/simulations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "name": "Fat-tree Performance Analysis",
+    "description": "Testing network performance under read-heavy workload",
+    "topologyId": 1,
+    "workloadId": 1,
+    "simulationTime": 10.0,
+    "numComputeNodes": 16,
+    "numStorageNodes": 8,
+    "workType": "read",
+    "dataSizeMb": 128.0,
+    "readProbability": 0.8
+  }'
 
-For questions about this project or professional inquiries:
-- **Email**: hyedailyuse@gmail.com
+# 4. Monitor job status (jobs now actually complete!)
+JOB_ID="simulation-job-uuid-from-response"
+curl -X GET http://localhost:3000/api/v1/simulations/$JOB_ID \
+  -H "Authorization: Bearer $TOKEN"
 
----
+# 5. List all jobs with pagination
+curl -X GET "http://localhost:3000/api/v1/simulations?page=1&limit=10&status=completed" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 6. Cancel a running job
+curl -X DELETE http://localhost:3000/api/v1/simulations/$JOB_ID \
+  -H "Authorization: Bearer $TOKEN"

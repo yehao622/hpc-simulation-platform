@@ -1,4 +1,4 @@
-// api-gateway/src/controllers/simulationController.ts
+// api-gateway/src/controllers/simulationController.ts - COMPLETE IMPLEMENTATION
 import { Request, Response } from 'express';
 import { Pool } from 'pg';
 import Joi from 'joi';
@@ -7,7 +7,7 @@ import Redis from 'redis';
 
 // Database and Redis connections - singleton pattern
 let dbPool: Pool;
-let redisClient: any; // Using any to avoid complex Redis type issues
+let redisClient: any;
 
 const getDbPool = (): Pool => {
   if (!dbPool) {
@@ -49,7 +49,7 @@ const createSimulationSchema = Joi.object({
   pcieBandwidth: Joi.number().positive().default(24.0),
   sasBandwidth: Joi.number().positive().default(10.0),
   
-  // Workload parameters  
+  // Workload parameters
   workType: Joi.string().valid('read', 'write', 'mixed').default('read'),
   dataSizeMb: Joi.number().positive().default(128.0),
   readProbability: Joi.number().min(0).max(1).default(0.5),
@@ -70,7 +70,7 @@ const querySchema = Joi.object({
 // Create new simulation job
 export const createSimulation = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = (req as any).user?.userId;
     if (!userId) {
       res.status(401).json({ error: 'Authentication required' });
       return;
@@ -192,7 +192,7 @@ export const createSimulation = async (req: Request, res: Response): Promise<voi
 // Get simulation jobs for user
 export const getSimulations = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = (req as any).user?.userId;
     if (!userId) {
       res.status(401).json({ error: 'Authentication required' });
       return;
@@ -281,7 +281,7 @@ export const getSimulations = async (req: Request, res: Response): Promise<void>
 // Get specific simulation job details
 export const getSimulationById = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = (req as any).user?.userId;
     const jobId = req.params.id;
 
     if (!userId) {
@@ -424,7 +424,7 @@ export const getSimulationById = async (req: Request, res: Response): Promise<vo
 // Cancel simulation job
 export const cancelSimulation = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = (req as any).user?.userId;
     const jobId = req.params.id;
 
     if (!userId) {
@@ -484,6 +484,7 @@ export const cancelSimulation = async (req: Request, res: Response): Promise<voi
     if (job.status === 'queued') {
       try {
         const redis = await getRedisClient();
+        // Note: This is a simplified removal - in production you'd want a more robust queue management
         await redis.lRem('simulation_queue', 1, JSON.stringify({ jobId }));
       } catch (redisError) {
         console.warn('Could not remove from Redis queue:', redisError);
@@ -510,7 +511,7 @@ export const cancelSimulation = async (req: Request, res: Response): Promise<voi
 // Get available topology templates
 export const getTopologyTemplates = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = (req as any).user?.userId;
 
     const pool = getDbPool();
     const result = await pool.query(`
@@ -545,7 +546,7 @@ export const getTopologyTemplates = async (req: Request, res: Response): Promise
 // Get available workload patterns
 export const getWorkloadPatterns = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = (req as any).user?.userId;
 
     const pool = getDbPool();
     const result = await pool.query(`

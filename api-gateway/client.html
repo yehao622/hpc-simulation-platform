@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HPC Simulation Platform - WebSocket Test Client</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #1a1a1a;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #4CAF50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            background: #2d2d2d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4CAF50;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.connected { background: #1B5E20; }
+        .status.disconnected { background: #B71C1C; }
+        .status.connecting { background: #E65100; }
+        input, button {
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        button {
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .logs {
+            background: #1e1e1e;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Monaco', monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 2px 0;
+        }
+        .log-info { color: #4CAF50; }
+        .log-warning { color: #FF9800; }
+        .log-error { color: #f44336; }
+        .log-data { color: #2196F3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 HPC Simulation Platform - WebSocket Test Client</h1>
+        
+        <!-- Connection Section -->
+        <div class="section">
+            <h3>🔗 WebSocket Connection</h3>
+            <div id="connectionStatus" class="status disconnected">Disconnected</div>
+            <div>
+                <input type="text" id="tokenInput" placeholder="Enter JWT token..." style="width: 300px;">
+                <button onclick="connect()">Connect</button>
+                <button onclick="disconnect()">Disconnect</button>
+            </div>
+        </div>
+
+        <!-- Job Monitoring Section -->
+        <div class="section">
+            <h3>🎯 Job Monitoring</h3>
+            <div>
+                <input type="text" id="jobIdInput" placeholder="Enter Job ID to monitor...">
+                <button onclick="subscribeToJob()" id="subscribeBtn" disabled>Subscribe</button>
+                <button onclick="getActiveJobs()" id="refreshJobsBtn" disabled>Get Active Jobs</button>
+            </div>
+            <div id="jobStatus"></div>
+        </div>
+
+        <!-- Logs Section -->
+        <div class="section">
+            <h3>📝 Real-time Logs</h3>
+            <button onclick="clearLogs()">Clear Logs</button>
+            <div id="logs" class="logs"></div>
+        </div>
+    </div>
+
+    <script>
+        let socket = null;
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const logClass = `log-${type}`;
+            logs.innerHTML += `<div class="log-entry ${logClass}">[${timestamp}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = message;
+        }
+
+        function updateButtons(connected) {
+            document.getElementById('subscribeBtn').disabled = !connected;
+            document.getElementById('refreshJobsBtn').disabled = !connected;
+        }
+
+        function connect() {
+            const token = document.getElementById('tokenInput').value.trim();
+            if (!token) {
+                alert('Please enter a JWT token');
+                return;
+            }
+
+            if (socket) {
+                socket.disconnect();
+            }
+
+            updateConnectionStatus('connecting', 'Connecting...');
+            log('🔄 Attempting to connect to WebSocket...', 'info');
+
+            socket = io('ws://localhost:3000', {
+                auth: { token: token }
+            });
+
+            socket.on('connect', () => {
+                updateConnectionStatus('connected', 'Connected');
+                updateButtons(true);
+                log('✅ Connected to WebSocket server', 'info');
+            });
+
+            socket.on('connected', (data) => {
+                log(`👋 Connection confirmed: ${data.userEmail} (ID: ${data.userId})`, 'info');
+            });
+
+            socket.on('disconnect', (reason) => {
+                updateConnectionStatus('disconnected', 'Disconnected');
+                updateButtons(false);
+                log(`❌ Disconnected: ${reason}`, 'warning');
+            });
+
+            socket.on('connect_error', (error) => {
+                updateConnectionStatus('disconnected', 'Connection Failed');
+                updateButtons(false);
+                log(`💥 Connection error: ${error.message}`, 'error');
+            });
+
+            socket.on('job-status-update', (data) => {
+                log(`📊 Job status: ${data.jobId} - ${data.status} (${data.progress}%)`, 'data');
+                updateJobDisplay(data);
+            });
+
+            socket.on('job-update', (data) => {
+                log(`🔄 Job update: ${data.jobId} - ${data.status}`, 'data');
+            });
+
+            socket.on('active-jobs', (data) => {
+                log(`📋 Active jobs: ${data.count} jobs`, 'info');
+            });
+
+            socket.on('error', (data) => {
+                log(`❌ Error: ${data.message}`, 'error');
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+            updateConnectionStatus('disconnected', 'Disconnected');
+            updateButtons(false);
+            log('🔌 Disconnected from WebSocket', 'info');
+        }
+
+        function subscribeToJob() {
+            const jobId = document.getElementById('jobIdInput').value.trim();
+            if (!jobId) {
+                alert('Please enter a Job ID');
+                return;
+            }
+
+            if (!socket || !socket.connected) {
+                alert('Please connect to WebSocket first');
+                return;
+            }
+
+            socket.emit('subscribe-job', jobId);
+            log(`📡 Subscribing to job: ${jobId}`, 'info');
+        }
+
+        function getActiveJobs() {
+            if (!socket || !socket.connected) {
+                alert('Please connect to WebSocket first');
+                return;
+            }
+
+            socket.emit('get-active-jobs');
+            log('📡 Requesting active jobs...', 'info');
+        }
+
+        function updateJobDisplay(jobData) {
+            const jobDisplay = document.getElementById('jobStatus');
+            jobDisplay.innerHTML = `
+                <div style="background: #333; padding: 10px; border-radius: 4px; margin: 10px 0;">
+                    <h4>🎯 ${jobData.name || jobData.jobId}</h4>
+                    <p><strong>Status:</strong> ${jobData.status}</p>
+                    <p><strong>Progress:</strong> ${jobData.progress}%</p>
+                    <p><small>Last updated: ${new Date(jobData.timestamp).toLocaleTimeString()}</small></p>
+                </div>
+            `;
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        // Initial setup
+        log('🌐 WebSocket Test Client Ready', 'info');
+        log('📋 Instructions:', 'info');
+        log('1. Get JWT token by logging in via API', 'info');
+        log('2. Enter token and click Connect', 'info');
+        log('3. Subscribe to job updates for real-time monitoring', 'info');
+    </script>
+</body>
+</html>

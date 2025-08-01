@@ -1,3 +1,4 @@
+import * as path from 'path';
 // api-gateway/src/index.ts - FIXED with Optional WebSocket
 import express from 'express';
 import cors from 'cors';
@@ -270,21 +271,177 @@ app.get('/api/v1/simulations/test', (req, res) => {
 
 // Serve WebSocket test client 
 app.get('/websocket-test', (req, res) => {
-  res.json({
-    message: 'WebSocket Test Client',
-    websocketEnabled: !!wsServer,
-    endpoint: wsServer ? '/socket.io/' : 'WebSocket not available',
-    instructions: [
-      '1. Get JWT token by logging in via API (POST /api/v1/auth/login)',
-      '2. Use the token to connect to WebSocket endpoint',
-      '3. Subscribe to job updates and monitor real-time progress'
-    ],
-    testCommands: {
-      login: 'curl -X POST http://localhost:3000/api/v1/auth/login -H "Content-Type: application/json" -d \'{"email":"user@example.com","password":"password"}\'',
-      websocketUrl: wsServer ? 'ws://localhost:3000/socket.io/' : 'Not available'
-    },
-    documentation: '/api/docs'
-  });
+  console.log('🧪 Serving WebSocket test client HTML');
+  
+  // Check if we have the static HTML file
+  const fs = require('fs');
+  const path = require('path');
+  const clientPath = path.join(__dirname, '..', 'public', 'websocket-client.html');
+  
+  try {
+    if (fs.existsSync(clientPath)) {
+      res.sendFile(clientPath);
+    } else {
+      // Fallback: serve inline HTML
+      res.setHeader('Content-Type', 'text/html');
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>WebSocket Test Client</title>
+            <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+            <style>
+                body { font-family: monospace; background: #1a1a1a; color: white; padding: 20px; }
+                .container { max-width: 800px; margin: 0 auto; }
+                input { padding: 10px; margin: 5px; width: 300px; background: #333; color: white; border: 1px solid #555; }
+                button { padding: 10px 15px; margin: 5px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+                button:disabled { background: #666; cursor: not-allowed; }
+                .logs { background: #2d2d2d; padding: 15px; height: 300px; overflow-y: auto; border: 1px solid #444; }
+                .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+                .connected { background: #1B5E20; }
+                .disconnected { background: #B71C1C; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🚀 WebSocket Test Client</h1>
+                
+                <div>
+                    <h3>Connection Status</h3>
+                    <div id="status" class="status disconnected">Disconnected</div>
+                    <input type="text" id="token" placeholder="Enter JWT Token..." />
+                    <button onclick="connect()">Connect</button>
+                    <button onclick="disconnect()" disabled id="disconnectBtn">Disconnect</button>
+                </div>
+                
+                <div>
+                    <h3>Job Monitoring</h3>
+                    <input type="text" id="jobId" placeholder="Enter Job ID..." />
+                    <button onclick="subscribeToJob()" disabled id="subscribeBtn">Subscribe</button>
+                    <button onclick="getActiveJobs()" disabled id="activeJobsBtn">Get Active Jobs</button>
+                </div>
+                
+                <div>
+                    <h3>Live Logs</h3>
+                    <button onclick="clearLogs()">Clear</button>
+                    <div id="logs" class="logs"></div>
+                </div>
+            </div>
+
+            <script>
+                let socket = null;
+                
+                function log(msg) {
+                    const logs = document.getElementById('logs');
+                    const time = new Date().toLocaleTimeString();
+                    logs.innerHTML += '[' + time + '] ' + msg + '<br>';
+                    logs.scrollTop = logs.scrollHeight;
+                }
+                
+                function updateStatus(connected) {
+                    const status = document.getElementById('status');
+                    const disconnectBtn = document.getElementById('disconnectBtn');
+                    const subscribeBtn = document.getElementById('subscribeBtn');
+                    const activeJobsBtn = document.getElementById('activeJobsBtn');
+                    
+                    if (connected) {
+                        status.textContent = '✅ Connected';
+                        status.className = 'status connected';
+                        disconnectBtn.disabled = false;
+                        subscribeBtn.disabled = false;
+                        activeJobsBtn.disabled = false;
+                    } else {
+                        status.textContent = '❌ Disconnected';
+                        status.className = 'status disconnected';
+                        disconnectBtn.disabled = true;
+                        subscribeBtn.disabled = true;
+                        activeJobsBtn.disabled = true;
+                    }
+                }
+                
+                function connect() {
+                    const token = document.getElementById('token').value.trim();
+                    if (!token) {
+                        alert('Please enter JWT token');
+                        return;
+                    }
+                    
+                    if (socket) socket.disconnect();
+                    
+                    log('🔄 Connecting to WebSocket...');
+                    socket = io('/', { auth: { token: token } });
+                    
+                    socket.on('connect', () => {
+                        log('✅ Connected to WebSocket!');
+                        updateStatus(true);
+                    });
+                    
+                    socket.on('connected', (data) => {
+                        log('👋 Authenticated: ' + data.userEmail);
+                    });
+                    
+                    socket.on('disconnect', () => {
+                        log('❌ Disconnected from WebSocket');
+                        updateStatus(false);
+                    });
+                    
+                    socket.on('connect_error', (error) => {
+                        log('💥 Connection error: ' + error.message);
+                        updateStatus(false);
+                    });
+                    
+                    socket.on('job-status-update', (data) => {
+                        log('📊 Job update: ' + data.jobId + ' → ' + data.status + ' (' + (data.progress || 0) + '%)');
+                    });
+                    
+                    socket.on('job-update', (data) => {
+                        log('🔄 Job event: ' + data.jobId + ' → ' + data.status);
+                    });
+                    
+                    socket.on('active-jobs', (data) => {
+                        log('📋 Active jobs: ' + data.count + ' found');
+                    });
+                }
+                
+                function disconnect() {
+                    if (socket) {
+                        socket.disconnect();
+                        socket = null;
+                    }
+                    updateStatus(false);
+                    log('🔌 Disconnected');
+                }
+                
+                function subscribeToJob() {
+                    const jobId = document.getElementById('jobId').value.trim();
+                    if (!jobId || !socket) return;
+                    
+                    socket.emit('subscribe-job', jobId);
+                    log('📡 Subscribed to job: ' + jobId);
+                }
+                
+                function getActiveJobs() {
+                    if (!socket) return;
+                    socket.emit('get-active-jobs');
+                    log('📡 Requesting active jobs...');
+                }
+                
+                function clearLogs() {
+                    document.getElementById('logs').innerHTML = '';
+                }
+                
+                // Initial message
+                log('🌐 WebSocket Test Client Ready');
+                log('💡 Get JWT token from: ./session4_test_script.sh');
+            </script>
+        </body>
+        </html>
+      `);
+    }
+  } catch (error) {
+    console.error('WebSocket client error:', error);
+    res.status(500).json({ error: 'Failed to serve WebSocket client' });
+  }
 });
 
 // Start HTTP server with optional WebSocket support
@@ -388,35 +545,6 @@ app.use('/api/v1/simulations', authenticateToken);
 
 console.log('✅ All routes configured' + (wsServer ? ' with WebSocket integration' : ''));
 
-// Serve WebSocket test client (optional)
-if (wsServer) {
-  app.get('/websocket-test', (req, res) => {
-    // Serve the client.html file if it exists
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const clientPath = path.join(__dirname, '..', 'client.html');
-      
-      if (fs.existsSync(clientPath)) {
-        res.sendFile(clientPath);
-      } else {
-        res.json({
-          message: 'WebSocket test client not found',
-          info: 'WebSocket endpoint available at /socket.io/',
-          documentation: '/api/docs'
-        });
-      }
-    } catch (error) {
-      res.json({
-        message: 'WebSocket is enabled',
-        endpoint: '/socket.io/',
-        authentication: 'JWT token required',
-        documentation: '/api/docs'
-      });
-    }
-  });
-}
-
 // General 404 handler
 app.use((req, res) => {
   console.log(`❌ 404 - Route not found: ${req.method} ${req.path}`);
@@ -472,3 +600,20 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Export WebSocket server for use by worker notifications (optional)
 export { wsServer };
 export default app;
+// Fixed WebSocket test client route
+app.get('/websocket-client', (req, res) => {
+  console.log('🧪 Serving WebSocket test client');
+  const fs = require('fs');
+  const clientPath = path.join(__dirname, '..', 'public', 'websocket-client.html');
+  
+  if (fs.existsSync(clientPath)) {
+    res.sendFile(clientPath);
+  } else {
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`
+      <h1>WebSocket Test Client</h1>
+      <p>Client file not found. Please run the websocket setup script.</p>
+      <p><a href="/api/docs">View API Documentation</a></p>
+    `);
+  }
+});

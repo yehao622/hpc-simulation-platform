@@ -1,0 +1,409 @@
+# api-gateway/src/graphql/schema.graphql
+# Complete GraphQL Schema for HPC Simulation Platform
+
+scalar DateTime
+scalar JSON
+
+# ===== ENUMS =====
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkType {
+  READ
+  WRITE
+  MIXED
+}
+
+enum TopologyType {
+  FAT_TREE
+  MESH
+  TORUS
+  CUSTOM
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+  DEBUG
+}
+
+enum SortOrder {
+  ASC
+  DESC
+}
+
+# ===== USER TYPES =====
+type User {
+  id: ID!
+  email: String!
+  username: String!
+  firstName: String!
+  lastName: String!
+  organization: String
+  role: String!
+  isActive: Boolean!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+  statistics: UserStatistics!
+  simulationJobs(
+    status: JobStatus
+    limit: Int = 20
+    offset: Int = 0
+    sortBy: String = "created_at"
+    sortOrder: SortOrder = DESC
+  ): [SimulationJob!]!
+}
+
+type UserStatistics {
+  totalJobs: Int!
+  completedJobs: Int!
+  runningJobs: Int!
+  failedJobs: Int!
+  totalSimulationTime: Float!
+  avgThroughput: Float
+  recentActivity: [JobActivity!]!
+}
+
+type JobActivity {
+  jobId: ID!
+  jobName: String!
+  status: JobStatus!
+  timestamp: DateTime!
+}
+
+# ===== SIMULATION TYPES =====
+type SimulationJob {
+  id: ID!
+  userId: ID!
+  user: User!
+  name: String!
+  description: String
+  status: JobStatus!
+  
+  # Configuration
+  topology: TopologyTemplate!
+  workload: WorkloadPattern!
+  
+  # Simulation parameters
+  simulationTime: Float!
+  randomSeed: Int
+  
+  # Network configuration
+  networkConfig: NetworkConfiguration!
+  
+  # Workload configuration  
+  workloadConfig: WorkloadConfiguration!
+  
+  # Custom parameters
+  customParameters: JSON
+  
+  # Execution details
+  workerId: String
+  createdAt: DateTime!
+  startedAt: DateTime
+  completedAt: DateTime
+  errorMessage: String
+  
+  # Results
+  results: SimulationResults
+  metrics: [SimulationMetric!]!
+  logs(
+    level: LogLevel
+    limit: Int = 50
+    offset: Int = 0
+  ): [JobLog!]!
+  
+  # Real-time status
+  progress: Int!
+  estimatedCompletion: DateTime
+}
+
+type NetworkConfiguration {
+  computeNodes: Int!
+  storageNodes: Int!
+  coreSwitches: Int!
+  aggrSwitches: Int!
+  edgeSwitches: Int!
+  infinibandBandwidth: Float!
+  pcieBandwidth: Float!
+  sasBandwidth: Float!
+}
+
+type WorkloadConfiguration {
+  workType: WorkType!
+  dataSizeMb: Float!
+  readProbability: Float!
+  requestRate: Float!
+}
+
+type SimulationResults {
+  totalThroughput: Float!
+  averageLatency: Float!
+  maxQueueLength: Int!
+  performanceMetrics: PerformanceMetrics!
+  networkUtilization: NetworkUtilization!
+}
+
+type PerformanceMetrics {
+  peakThroughput: Float!
+  minLatency: Float!
+  avgResponseTime: Float!
+  successRate: Float!
+}
+
+type NetworkUtilization {
+  avgInfinibandUtilization: Float!
+  avgPcieUtilization: Float!
+  avgSasUtilization: Float!
+  bottleneckComponents: [String!]!
+}
+
+# ===== METRICS AND LOGS =====
+type SimulationMetric {
+  id: ID!
+  jobId: ID!
+  metricType: String!
+  componentType: String
+  componentId: String
+  timestampSec: Float!
+  value: Float!
+  unit: String
+  createdAt: DateTime!
+}
+
+type JobLog {
+  id: ID!
+  jobId: ID!
+  logLevel: LogLevel!
+  message: String!
+  component: String
+  simulationTime: Float
+  createdAt: DateTime!
+}
+
+# ===== TEMPLATE TYPES =====
+type TopologyTemplate {
+  id: ID!
+  name: String!
+  type: TopologyType!
+  description: String
+  parameters: JSON!
+  createdBy: ID
+  creator: User
+  isPublic: Boolean!
+  createdAt: DateTime!
+  usageCount: Int!
+}
+
+type WorkloadPattern {
+  id: ID!
+  name: String!
+  description: String
+  parameters: JSON!
+  createdBy: ID
+  creator: User
+  isPublic: Boolean!
+  createdAt: DateTime!
+  usageCount: Int!
+}
+
+# ===== PAGINATION =====
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+  totalCount: Int!
+}
+
+type SimulationJobConnection {
+  edges: [SimulationJobEdge!]!
+  pageInfo: PageInfo!
+}
+
+type SimulationJobEdge {
+  node: SimulationJob!
+  cursor: String!
+}
+
+# ===== ANALYTICS TYPES =====
+type SystemAnalytics {
+  activeJobs: Int!
+  completedToday: Int!
+  avgCompletionTime: Float!
+  systemLoad: Float!
+  popularTopologies: [TopologyUsage!]!
+  performanceTrends: [PerformanceTrend!]!
+}
+
+type TopologyUsage {
+  topology: TopologyTemplate!
+  usageCount: Int!
+  avgPerformance: Float!
+}
+
+type PerformanceTrend {
+  date: DateTime!
+  avgThroughput: Float!
+  avgLatency: Float!
+  jobCount: Int!
+}
+
+# ===== INPUT TYPES =====
+input CreateSimulationJobInput {
+  name: String!
+  description: String
+  topologyId: ID!
+  workloadId: ID!
+  simulationTime: Float = 10.0
+  randomSeed: Int
+  
+  # Network configuration
+  numComputeNodes: Int = 16
+  numStorageNodes: Int = 8
+  numCoreSwitches: Int = 2
+  numAggrSwitches: Int = 8
+  numEdgeSwitches: Int = 8
+  infinibandBandwidth: Float = 25.0
+  pcieBandwidth: Float = 24.0
+  sasBandwidth: Float = 10.0
+  
+  # Workload configuration
+  workType: WorkType = READ
+  dataSizeMb: Float = 128.0
+  readProbability: Float = 0.5
+  requestRate: Float = 0.001
+  
+  # Custom parameters
+  customParameters: JSON
+}
+
+input UpdateSimulationJobInput {
+  name: String
+  description: String
+}
+
+input CreateTopologyTemplateInput {
+  name: String!
+  type: TopologyType!
+  description: String
+  parameters: JSON!
+  isPublic: Boolean = false
+}
+
+input CreateWorkloadPatternInput {
+  name: String!
+  description: String
+  parameters: JSON!
+  isPublic: Boolean = false
+}
+
+input SimulationJobFilter {
+  status: JobStatus
+  topologyId: ID
+  workloadId: ID
+  createdAfter: DateTime
+  createdBefore: DateTime
+  workType: WorkType
+}
+
+# ===== SUBSCRIPTION TYPES =====
+type JobStatusUpdate {
+  jobId: ID!
+  status: JobStatus!
+  progress: Int
+  message: String
+  results: SimulationResults
+  timestamp: DateTime!
+}
+
+# ===== ROOT TYPES =====
+type Query {
+  # Current user
+  me: User!
+  
+  # User management
+  user(id: ID!): User
+  users(limit: Int = 20, offset: Int = 0): [User!]!
+  
+  # Simulation jobs
+  simulationJob(id: ID!): SimulationJob
+  simulationJobs(
+    filter: SimulationJobFilter
+    limit: Int = 20
+    offset: Int = 0
+    sortBy: String = "created_at"
+    sortOrder: SortOrder = DESC
+  ): [SimulationJob!]!
+  
+  # Paginated jobs
+  simulationJobsConnection(
+    first: Int = 20
+    after: String
+    filter: SimulationJobFilter
+  ): SimulationJobConnection!
+  
+  # Templates
+  topologyTemplates(
+    type: TopologyType
+    publicOnly: Boolean = false
+    limit: Int = 50
+  ): [TopologyTemplate!]!
+  
+  workloadPatterns(
+    publicOnly: Boolean = false
+    limit: Int = 50
+  ): [WorkloadPattern!]!
+  
+  # Analytics
+  myAnalytics: UserStatistics!
+  systemAnalytics: SystemAnalytics!
+  
+  # Real-time data
+  activeJobs: [SimulationJob!]!
+  recentMetrics(jobId: ID!, limit: Int = 100): [SimulationMetric!]!
+  
+  # Search and filters
+  searchJobs(query: String!, limit: Int = 20): [SimulationJob!]!
+}
+
+type Mutation {
+  # Job management
+  createSimulationJob(input: CreateSimulationJobInput!): SimulationJob!
+  updateSimulationJob(id: ID!, input: UpdateSimulationJobInput!): SimulationJob!
+  cancelSimulationJob(id: ID!): SimulationJob!
+  deleteSimulationJob(id: ID!): Boolean!
+  
+  # Template management
+  createTopologyTemplate(input: CreateTopologyTemplateInput!): TopologyTemplate!
+  createWorkloadPattern(input: CreateWorkloadPatternInput!): WorkloadPattern!
+  
+  # User management (admin only)
+  updateUserRole(userId: ID!, role: String!): User!
+  deactivateUser(userId: ID!): User!
+}
+
+type Subscription {
+  # Real-time job updates
+  jobStatusUpdated(jobId: ID): JobStatusUpdate!
+  jobMetricsUpdated(jobId: ID!): SimulationMetric!
+  
+  # User-specific updates
+  myJobsUpdated: JobStatusUpdate!
+  
+  # System-wide updates
+  systemStatsUpdated: SystemAnalytics!
+}
+
+# ===== SCHEMA ROOT =====
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

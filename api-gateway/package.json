@@ -1,21 +1,25 @@
 {
   "name": "hpc-simulation-api-gateway",
-  "version": "1.0.0",
-  "description": "API Gateway for HPC Simulation Platform",
+  "version": "1.2.0",
+  "description": "API Gateway for HPC Simulation Platform with GraphQL support",
   "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "build": "tsc",
-    "build:force": "tsc --build --force"
+    "build:force": "tsc --build --force",
+    "graphql:schema": "cp src/graphql/schema.graphql dist/graphql/",
+    "postbuild": "npm run graphql:schema"
   },
   "dependencies": {
+    "@graphql-tools/schema": "^10.0.25",
     "apollo-server-express": "^3.13.0",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "graphql": "^16.11.0",
+    "graphql-type-json": "^0.3.2",
     "helmet": "^6.0.1",
     "joi": "^17.7.0",
     "jsonwebtoken": "^9.0.0",
@@ -23,6 +27,7 @@
     "pg": "^8.8.0",
     "redis": "^4.6.4",
     "socket.io": "^4.8.1",
+    "subscriptions-transport-ws": "^0.11.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

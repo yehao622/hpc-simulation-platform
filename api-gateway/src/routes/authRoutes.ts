@@ -11,7 +11,7 @@ try {
     authController = require('../controllers/authController');
     authMiddleware = require('../middleware/authMiddleware');
     console.log('✅ Auth controller and middleware loaded successfully');
-} catch (error) {
+} catch (error: any) {
     console.error('💥 Failed to load auth dependencies:', error.message);
     
     // Create fallback handlers

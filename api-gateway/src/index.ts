@@ -10,12 +10,13 @@ import { Pool } from 'pg';
 // Import GraphQL server
 let createApolloServer: any = null;
 let graphqlHealthCheck: any = null;
+
 try {
   const graphqlModule = require('./graphql/server');
   createApolloServer = graphqlModule.createApolloServer;
   graphqlHealthCheck = graphqlModule.graphqlHealthCheck;
   console.log('✅ GraphQL module loaded successfully');
-} catch (error) {
+} catch (error: any) {
   console.warn('⚠️ GraphQL module not available:', (error as any).message);
   console.info('🔄 API will run without GraphQL support');
 }
@@ -50,7 +51,12 @@ let apolloServer: any = null;
 const initializeGraphQL = async () => {
   if (createApolloServer) {
     try {
+      console.log('🚀 Initializing GraphQL server...');
+      
+      // Create Apollo Server
       apolloServer = createApolloServer();
+      
+      // Start the server first
       await apolloServer.start();
       
       // Apply GraphQL middleware to Express
@@ -67,17 +73,22 @@ const initializeGraphQL = async () => {
       console.log(`🎮 GraphQL Playground: http://localhost:${port}${apolloServer.graphqlPath}`);
       
       // Health check GraphQL
-      const isHealthy = await graphqlHealthCheck(apolloServer);
-      if (isHealthy) {
-        console.log('💚 GraphQL health check passed');
-      } else {
-        console.warn('⚠️ GraphQL health check failed');
+      if (graphqlHealthCheck) {
+        const isHealthy = await graphqlHealthCheck(apolloServer);
+        if (isHealthy) {
+          console.log('💚 GraphQL health check passed');
+        } else {
+          console.warn('⚠️ GraphQL health check failed');
+        }
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('💥 Failed to initialize GraphQL server:', error);
       console.info('🔄 Continuing without GraphQL support');
+      apolloServer = null;
     }
+  } else {
+    console.warn('⚠️ GraphQL createApolloServer function not available');
   }
 };
 
@@ -184,12 +195,16 @@ app.get('/api/health', async (req, res) => {
     try {
       const isHealthy = graphqlHealthCheck ? await graphqlHealthCheck(apolloServer) : true;
       health.services.graphql = isHealthy ? 'active' : 'degraded';
-    } catch (error) {
+      health.features.graphqlApi = true;
+      health.endpoints.graphql = '/graphql';
+    } catch (error: any) {
       health.services.graphql = 'error';
       health.status = 'degraded';
     }
   } else {
     health.services.graphql = 'disabled';
+    health.features.graphqlApi = false;
+    health.endpoints.graphql = null;
   }
 
   const statusCode = health.status === 'healthy' ? 200 : 503;
@@ -741,7 +756,7 @@ initializeGraphQL().then(() => {
     try {
       const { setupGraphQLSubscriptions } = require('./graphql/server');
       setupGraphQLSubscriptions(apolloServer, httpServer);
-    } catch (error) {
+    } catch (error: any) {
       console.warn('⚠️ GraphQL subscriptions not available:', error.message);
     }
   }

@@ -11,7 +11,7 @@ try {
     simulationController = require('../controllers/simulationController');
     authMiddleware = require('../middleware/authMiddleware');
     console.log('✅ Simulation controller and middleware loaded successfully');
-} catch (error) {
+} catch (error: any) {
     console.error('💥 Failed to load simulation dependencies:', error.message);
     
     // Create fallback handlers

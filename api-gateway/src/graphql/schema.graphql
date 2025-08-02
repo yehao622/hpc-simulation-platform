@@ -377,6 +377,7 @@ type Mutation {
   # Job management
   createSimulationJob(input: CreateSimulationJobInput!): SimulationJob!
   updateSimulationJob(id: ID!, input: UpdateSimulationJobInput!): SimulationJob!
+  updateSimulationJobStatus(id: ID!, status: JobStatus!): SimulationJob!
   cancelSimulationJob(id: ID!): SimulationJob!
   deleteSimulationJob(id: ID!): Boolean!
   
@@ -393,6 +394,8 @@ type Subscription {
   # Real-time job updates
   jobStatusUpdated(jobId: ID): JobStatusUpdate!
   jobMetricsUpdated(jobId: ID!): SimulationMetric!
+  jobUpdated(jobId: ID!): SimulationJob!
+  userJobsUpdated(userId: ID!): SimulationJob!
   
   # User-specific updates
   myJobsUpdated: JobStatusUpdate!

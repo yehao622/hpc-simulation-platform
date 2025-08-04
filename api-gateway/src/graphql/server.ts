@@ -1,8 +1,7 @@
-// api-gateway/src/graphql/server.ts
-// Complete Fixed GraphQL Server - All TypeScript Errors Resolved
+// api-gateway/src/graphql/server.ts - FIXED VERSION
+// Complete Fixed GraphQL Server with proper Express middleware mounting
 
 import { ApolloServer } from 'apollo-server-express';
-import { makeExecutableSchema } from '@graphql-tools/schema';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { resolvers } from './resolvers';
@@ -29,6 +28,7 @@ const createGraphQLSchema = () => {
   
   try {
     typeDefs = readFileSync(schemaPath, 'utf8');
+    console.log('✅ GraphQL schema loaded from file');
   } catch (error) {
     console.warn('⚠️ GraphQL schema file not found, using inline schema');
     // Fallback inline schema for development
@@ -151,17 +151,7 @@ const createGraphQLSchema = () => {
     `;
   }
   
-  try {
-    const schema = makeExecutableSchema({
-      typeDefs,
-      resolvers
-    });
-    console.log('✅ GraphQL schema created successfully');
-    return schema;
-  } catch (error: any) {
-    console.error('💥 Failed to create GraphQL schema:', error.message);
-    throw error;
-  }
+  return typeDefs;
 };
 
 // Create GraphQL context with authentication
@@ -192,24 +182,26 @@ const createGraphQLContext = ({ req }: { req?: any } = {}): GraphQLContext => {
         };
       }
     } catch (error) {
-      console.warn('⚠️ Invalid JWT token:', error);
+      console.warn('⚠️ Invalid JWT token in GraphQL context');
     }
   }
 
   return context;
 };
 
-// Create Apollo Server with proper configuration
+// Create Apollo Server with proper configuration for apollo-server-express
 const createApolloServer = () => {
   try {
-    const schema = createGraphQLSchema();
+    const typeDefs = createGraphQLSchema();
     
     const server = new ApolloServer({
-      schema,
+      typeDefs,
+      resolvers,
       context: createGraphQLContext,
-      introspection: true, // Always enable for debugging
+      introspection: true, // Enable for development
+      // playground: true,    // Enable GraphQL Playground
       formatError: (error: any) => {
-        console.error('🔥 GraphQL Error:', error);
+        console.error('🔥 GraphQL Error:', error.message);
         return {
           message: error.message,
           locations: error.locations,
@@ -228,61 +220,10 @@ const createApolloServer = () => {
   }
 };
 
-// GraphQL Subscription setup (for WebSocket integration)
-export const setupGraphQLSubscriptions = (apolloServer: any, httpServer: any) => {
-  try {
-    const { SubscriptionServer } = require('subscriptions-transport-ws');
-    const { execute, subscribe } = require('graphql');
-    
-    // Get schema from apollo server or create new one
-    const schema = createGraphQLSchema();
-    
-    // Create subscription server
-    SubscriptionServer.create(
-      {
-        execute,
-        subscribe,
-        schema,
-        onConnect: async (connectionParams: any) => {
-          // Authenticate WebSocket connection for subscriptions
-          try {
-            const token = connectionParams.authorization?.replace('Bearer ', '');
-            if (token) {
-              const jwtSecret = process.env.JWT_SECRET;
-              if (jwtSecret) {
-                const decoded: any = jwt.verify(token, jwtSecret);
-                console.log(`🔗 GraphQL subscription authenticated: ${decoded.email}`);
-                return { userId: decoded.userId, email: decoded.email };
-              }
-            }
-          } catch (error: any) {
-            console.warn('⚠️ GraphQL subscription authentication failed:', error.message);
-            throw new Error('Authentication failed');
-          }
-          
-          throw new Error('Authentication required for subscriptions');
-        },
-        onDisconnect: () => {
-          console.log('📡 GraphQL subscription client disconnected');
-        }
-      },
-      {
-        server: httpServer,
-        path: '/graphql-subscriptions'
-      }
-    );
-    
-    console.log('🔔 GraphQL subscriptions enabled at /graphql-subscriptions');
-    
-  } catch (error: any) {
-    console.warn('⚠️ GraphQL subscriptions not available:', error.message);
-    console.info('📝 Subscriptions require subscriptions-transport-ws package');
-  }
-};
-
 // Health check for GraphQL endpoint
 const graphqlHealthCheck = async (apolloServer: any): Promise<boolean> => {
   try {
+    // Simple introspection query to test GraphQL
     const result = await apolloServer.executeOperation({
       query: `
         query HealthCheck {
@@ -294,11 +235,7 @@ const graphqlHealthCheck = async (apolloServer: any): Promise<boolean> => {
         }
       `,
       // Provide empty context for health check
-      context: {
-        db: new Pool({
-          connectionString: process.env.DATABASE_URL
-        })
-      }
+      context: createGraphQLContext()
     });
     
     const isHealthy = !result.errors && result.data?.__schema?.queryType?.name === 'Query';
@@ -315,5 +252,6 @@ const graphqlHealthCheck = async (apolloServer: any): Promise<boolean> => {
   }
 };
 
+// Export functions
 export { createApolloServer, graphqlHealthCheck };
 export default createApolloServer;

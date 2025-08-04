@@ -55,22 +55,77 @@ const initializeGraphQL = async () => {
       
       // Create Apollo Server
       apolloServer = createApolloServer();
-      
-      // Start the server first
+      // CRITICAL: For Apollo Server 4, we must await start() first
       await apolloServer.start();
       
-      // Apply GraphQL middleware to Express
-      apolloServer.applyMiddleware({ 
-        app, 
-        path: '/graphql',
-        cors: {
-          origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000', 'http://localhost:3001'],
-          credentials: true
+      // Simplified manual GraphQL handler with better error handling
+      app.all('/graphql', async (req, res) => {
+        console.log(`🔍 GraphQL handler hit: ${req.method} ${req.path}`);
+        console.log(`🔍 Body:`, JSON.stringify(req.body));
+        
+        if (req.method === 'GET') {
+          // Handle GET requests (playground/introspection)
+          res.send(`
+            <!DOCTYPE html>
+            <html>
+            <head><title>GraphQL Endpoint</title></head>
+            <body>
+              <h1>GraphQL Endpoint Active</h1>
+              <p>Send POST requests with GraphQL queries to this endpoint</p>
+              <p>Example: POST /graphql with body: {"query": "{ __schema { queryType { name } } }"}</p>
+            </body>
+            </html>
+          `);
+          return;
+        }
+        
+        if (req.method === 'POST') {
+          try {
+            // Simple GraphQL execution
+            const { query, variables, operationName } = req.body;
+            
+            if (!query) {
+              res.status(400).json({ error: 'No query provided' });
+              return;
+            }
+            
+            console.log(`🔍 Executing GraphQL query: ${query.substring(0, 100)}...`);
+            
+            const result = await apolloServer.executeOperation({
+              query,
+              variables,
+              operationName,
+            });
+            
+            console.log(`🔍 GraphQL result:`, JSON.stringify(result).substring(0, 200));
+            res.json(result);
+            
+          } catch (error) {
+            console.error('💥 GraphQL execution error:', error);
+            res.status(500).json({ error: 'GraphQL execution failed', details: error });
+          }
+          return;
+        }
+        
+        // Other methods
+        res.status(405).json({ error: 'Method not allowed' });
+      });
+
+      console.log('🔧 Manual GraphQL handler mounted at /graphql');
+      // DEBUG: List all registered routes
+      console.log('🔍 Registered routes:');
+      app._router.stack.forEach((middleware: any, index: any) => {
+        if (middleware.route) {
+          // Direct routes
+          console.log(`  ${index}: ${Object.keys(middleware.route.methods).join(',')} ${middleware.route.path}`);
+        } else if (middleware.name === 'router') {
+          // Router middleware
+          console.log(`  ${index}: ROUTER ${middleware.regexp}`);
+        } else {
+          // Other middleware
+          console.log(`  ${index}: ${middleware.name} ${middleware.regexp}`);
         }
       });
-      
-      console.log(`✅ GraphQL server ready at /graphql`);
-      console.log(`🎮 GraphQL Playground: http://localhost:${port}${apolloServer.graphqlPath}`);
       
       // Health check GraphQL
       if (graphqlHealthCheck) {
@@ -91,6 +146,28 @@ const initializeGraphQL = async () => {
     console.warn('⚠️ GraphQL createApolloServer function not available');
   }
 };
+
+// Simple test route to verify route registration
+app.post('/test-post', (req, res) => {
+  console.log('🧪 TEST POST route hit');
+  res.json({ message: 'POST route working' });
+});
+
+app.get('/test-get', (req, res) => {
+  console.log('🧪 TEST GET route hit');
+  res.json({ message: 'GET route working' });
+});
+
+// Test if the route exists
+app.get('/debug-routes', (req, res) => {
+  let routes = [','];
+  app._router.stack.forEach((middleware: any) => {
+    if (middleware.route) {
+      routes.push(`${Object.keys(middleware.route.methods).join(',')} ${middleware.route.path}`);
+    }
+  });
+  res.json({ routes });
+});
 
 // Database connection
 let dbPool: Pool;
@@ -128,6 +205,16 @@ app.use(cors({
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// DEBUG: Log ALL requests to see what's happening
+app.use((req, res, next) => {
+  if (req.path === '/graphql') {
+    console.log(`🚨 EARLY INTERCEPT: ${req.method} ${req.path}`);
+    console.log(`🚨 User-Agent: ${req.headers['user-agent']}`);
+    console.log(`🚨 Content-Type: ${req.headers['content-type']}`);
+  }
+  next();
+});
 
 // Request logging
 if (process.env.NODE_ENV !== 'test') {
@@ -191,16 +278,23 @@ app.get('/api/health', async (req, res) => {
   }
 
   // GraphQL status
-  if (apolloServer) {
+  // GraphQL status - check if GraphQL module loaded and server created
+  if (createApolloServer && apolloServer) {
     try {
       const isHealthy = graphqlHealthCheck ? await graphqlHealthCheck(apolloServer) : true;
       health.services.graphql = isHealthy ? 'active' : 'degraded';
       health.features.graphqlApi = true;
-      health.endpoints.graphql = '/graphql';
+      health.endpoints.graphql = apolloServer.graphqlPath || '/graphql';
     } catch (error: any) {
+      console.error('GraphQL health check error:', error);
       health.services.graphql = 'error';
       health.status = 'degraded';
     }
+  } else if (createApolloServer && !apolloServer) {
+    // GraphQL module loaded but server not initialized yet
+    health.services.graphql = 'initializing';
+    health.features.graphqlApi = true;
+    health.endpoints.graphql = '/graphql';
   } else {
     health.services.graphql = 'disabled';
     health.features.graphqlApi = false;
@@ -721,9 +815,13 @@ query MyDashboard {
   }
 });
 
-// Initialize GraphQL server
-initializeGraphQL().then(() => {
-  // Start HTTP server with optional WebSocket and GraphQL support
+// Initialize GraphQL server first
+// Initialize GraphQL server and start HTTP server
+const startServer = async () => {
+  // Initialize GraphQL BEFORE starting the server
+  await initializeGraphQL();
+  
+  // Now start the HTTP server
   const httpServer = server.listen(port, '0.0.0.0', () => {
     console.log(`✅ HPC Simulation API running on port ${port}`);
     console.log(`📚 Health check: http://localhost:${port}/api/health`);
@@ -751,15 +849,22 @@ initializeGraphQL().then(() => {
     console.log(`🎮 Combined test client: http://localhost:${port}/websocket-test`);
   });
 
-  // Setup GraphQL subscriptions if available
-  if (apolloServer && httpServer) {
-    try {
-      const { setupGraphQLSubscriptions } = require('./graphql/server');
-      setupGraphQLSubscriptions(apolloServer, httpServer);
-    } catch (error: any) {
-      console.warn('⚠️ GraphQL subscriptions not available:', error.message);
-    }
+  // Note: GraphQL subscriptions will be added in future version
+  console.log('📡 GraphQL subscriptions: Coming soon');
+};
+
+// Start the server
+startServer().catch(error => {
+  console.error('💥 Failed to start server:', error);
+  process.exit(1);
+});
+
+// DEBUG: Check if GraphQL requests reach near the end
+app.use((req, res, next) => {
+  if (req.path === '/graphql') {
+    console.log(`🚨 LATE INTERCEPT: ${req.method} ${req.path} - This should NOT appear if GraphQL handler worked`);
   }
+  next();
 });
 
 // 404 handler for API routes

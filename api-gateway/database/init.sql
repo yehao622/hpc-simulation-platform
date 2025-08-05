@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS simulation_jobs (
     workload_id INTEGER REFERENCES workload_patterns(id),
     simulation_time DECIMAL(10,6) NOT NULL DEFAULT 10.0,
     random_seed INTEGER,
+    progress INTEGER DEFAULT 0,
     
     -- Network configuration
     num_compute_nodes INTEGER NOT NULL DEFAULT 16,

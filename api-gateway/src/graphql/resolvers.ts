@@ -104,8 +104,10 @@ class DatabaseService {
   async getSimulationJob(jobId: string) {
     const result = await this.pool.query(`
       SELECT id, user_id, name, description, status, simulation_time,
-             created_at, started_at, completed_at, progress,
-             total_throughput, average_latency, max_queue_length
+         topology_id, workload_id,
+         created_at, started_at, completed_at, 
+         COALESCE(progress, 0) as progress,
+         total_throughput, average_latency, max_queue_length
       FROM simulation_jobs WHERE id = $1
     `, [jobId]);
     
@@ -115,8 +117,10 @@ class DatabaseService {
   async getSimulationJobs(limit: number, offset: number, status?: string, userId?: number) {
     let query = `
       SELECT id, user_id, name, description, status, simulation_time,
-             created_at, started_at, completed_at, progress,
-             total_throughput, average_latency, max_queue_length
+         topology_id, workload_id,
+         created_at, started_at, completed_at, 
+         COALESCE(progress, 0) as progress,
+         total_throughput, average_latency, max_queue_length
       FROM simulation_jobs
     `;
     
@@ -127,7 +131,7 @@ class DatabaseService {
     if (status) {
       paramCount++;
       conditions.push(`status = $${paramCount}`);
-      params.push(status);
+      params.push(status.toLowerCase());
     }
     
     if (userId) {
@@ -162,9 +166,15 @@ class DatabaseService {
     `, [
       jobId, userId, input.name, input.description || null,
       input.topologyId, input.workloadId, input.simulationTime,
-      input.numComputeNodes, input.numStorageNodes, input.workType,
+      input.numComputeNodes, input.numStorageNodes, input.workType.toLowerCase(),
       input.dataSizeMb, input.readProbability, input.requestRate
     ]);
+    
+    // Add to job queue
+    await this.pool.query(
+      'INSERT INTO job_queue (job_id, priority) VALUES ($1, $2)',
+      [jobId, 0]
+    );
     
     return this.formatSimulationJob(result.rows[0]);
   }
@@ -173,6 +183,8 @@ class DatabaseService {
     return {
       id: row.id,
       userId: row.user_id,
+      topologyId: row.topology_id,
+      workloadId: row.workload_id, 
       name: row.name,
       description: row.description,
       status: row.status.toUpperCase(),
@@ -180,7 +192,7 @@ class DatabaseService {
       createdAt: row.created_at,
       startedAt: row.started_at,
       completedAt: row.completed_at,
-      progress: parseInt(row.progress) || 0,
+      progress: row.progress ? parseInt(row.progress) : 0,
       results: (row.total_throughput || row.average_latency || row.max_queue_length) ? {
         totalThroughput: parseFloat(row.total_throughput) || 0,
         averageLatency: parseFloat(row.average_latency) || 0,
@@ -200,7 +212,7 @@ class DatabaseService {
     return result.rows.map(row => ({
       id: row.id,
       name: row.name,
-      type: row.type,
+      type: row.type.toUpperCase(),
       description: row.description,
       parameters: row.parameters,
       isPublic: row.is_public,
@@ -229,6 +241,7 @@ class DatabaseService {
   async searchJobs(query: string, limit: number, userId?: number) {
     let searchQuery = `
       SELECT id, user_id, name, description, status, simulation_time,
+             topology_id, workload_id,
              created_at, started_at, completed_at, progress,
              total_throughput, average_latency, max_queue_length
       FROM simulation_jobs
@@ -310,7 +323,7 @@ export const resolvers = {
 
     topologyTemplates: async (_: any, { limit, offset }: { limit: number; offset: number }, context: any) => {
       requireAuth(context);
-      return await db.getTopologyTemplates(limit, offset);
+      return await db.getTopologyTemplates(limit || 10, offset || 0);
     },
 
     workloadPatterns: async (_: any, { limit, offset }: { limit: number; offset: number }, context: any) => {
@@ -321,6 +334,11 @@ export const resolvers = {
     searchJobs: async (_: any, { query, limit }: { query: string; limit: number }, context: any) => {
       const user = requireAuth(context);
       return await db.searchJobs(query, limit, user.userId);
+    },
+
+    myAnalytics: async (_: any, __: any, context: any) => {
+      const user = requireAuth(context);
+      return await db.getUserStatistics(user.userId);
     },
   },
 
@@ -402,6 +420,51 @@ export const resolvers = {
     user: async (parent: any, _: any, context: any) => {
       return await db.getUser(parent.userId);
     },
+    
+    topology: async (parent: any, _: any, context: any) => {
+      const result = await context.db.query(`
+        SELECT id, name, type, description, parameters, is_public, created_at
+        FROM topology_templates 
+        WHERE id = $1
+      `, [parent.topologyId]);
+      
+      if (result.rows.length === 0) {
+        throw new Error(`Topology template ${parent.topologyId} not found`);
+      }
+      
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        name: row.name,
+        type: row.type.toUpperCase(),
+        description: row.description,
+        parameters: row.parameters,
+        isPublic: row.is_public,
+        createdAt: row.created_at
+      };
+    },
+    
+    workload: async (parent: any, _: any, context: any) => {
+      const result = await context.db.query(`
+        SELECT id, name, description, parameters, is_public, created_at
+        FROM workload_patterns 
+        WHERE id = $1
+      `, [parent.workloadId]);
+      
+      if (result.rows.length === 0) {
+        throw new Error(`Workload pattern ${parent.workloadId} not found`);
+      }
+      
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        parameters: row.parameters,
+        isPublic: row.is_public,
+        createdAt: row.created_at
+      };
+    }
   },
 
   // Subscription resolvers (placeholder)

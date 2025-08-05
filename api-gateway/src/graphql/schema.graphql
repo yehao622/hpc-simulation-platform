@@ -340,6 +340,7 @@ type Query {
     offset: Int = 0
     sortBy: String = "created_at"
     sortOrder: SortOrder = DESC
+    status: JobStatus
   ): [SimulationJob!]!
   
   # Paginated jobs

@@ -242,7 +242,7 @@ class DatabaseService {
     let searchQuery = `
       SELECT id, user_id, name, description, status, simulation_time,
              topology_id, workload_id,
-             created_at, started_at, completed_at, progress,
+             created_at, started_at, completed_at, COALESCE(progress, 0) as progress,
              total_throughput, average_latency, max_queue_length
       FROM simulation_jobs
       WHERE (name ILIKE $1 OR description ILIKE $1)
@@ -251,14 +251,12 @@ class DatabaseService {
     const params: any[] = [`%${query}%`];
     
     if (userId) {
-      searchQuery += ' AND user_id = $2 LIMIT $3';
-      params.push(userId.toString(), limit.toString());
-    } else {
-      searchQuery += ' LIMIT $2';
-      params.push(limit.toString());
-    }
-    
-    searchQuery += ' ORDER BY created_at DESC';
+      params.push(userId);
+      searchQuery += ` AND user_id = $${params.length}`;
+    } 
+
+    params.push(limit);
+    searchQuery += ` ORDER BY created_at DESC LIMIT $${params.length}`;
     
     const result = await this.pool.query(searchQuery, params);
     return result.rows.map(row => this.formatSimulationJob(row));
@@ -318,7 +316,9 @@ export const resolvers = {
 
     simulationJobs: async (_: any, { limit, offset, status }: { limit: number; offset: number; status?: string }, context: any) => {
       const user = requireAuth(context);
-      return await db.getSimulationJobs(limit, offset, status, user.userId);
+      // Convert GraphQL enum to lowercase for database
+      const dbStatus = status ? status.toLowerCase() : undefined;
+      return await db.getSimulationJobs(limit || 20, offset || 0, dbStatus, user.userId);
     },
 
     topologyTemplates: async (_: any, { limit, offset }: { limit: number; offset: number }, context: any) => {

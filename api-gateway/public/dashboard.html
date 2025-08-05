@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HPC Simulation Platform - Interactive Dashboard</title>
+    
+    <!-- External Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.30.0/index.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --dark-bg: #0f172a;
+            --card-bg: #1e293b;
+            --border-color: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .dashboard-container {
+            padding: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            position: relative;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+        }
+
+        .auth-section {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .auth-form {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connected { background: var(--success-color); }
+        .status-disconnected { background: var(--error-color); }
+        .status-connecting { background: var(--warning-color); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .card-icon {
+            font-size: 1.5rem;
+        }
+
+        .metric {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-change {
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-top: 5px;
+            align-self: flex-start;
+        }
+
+        .metric-change.positive {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success-color);
+        }
+
+        .metric-change.negative {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error-color);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .chart-container.large {
+            height: 400px;
+        }
+
+        .job-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .job-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+
+        .job-item:hover {
+            background: rgba(59, 130, 246, 0.05);
+            margin: 0 -15px;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .job-info h4 {
+            color: var(--text-primary);
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .job-info p {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .job-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-queued { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+        .status-running { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .status-completed { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+        .status-failed { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .status-cancelled { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+
+        .progress-bar {
+            width: 100px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+            transition: width 0.5s ease;
+            border-radius: 3px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        input, button, select {
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--card-bg);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        button {
+            background: linear-gradient(135deg, var(--primary-color), #3730a3);
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+            border: none;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+        }
+
+        button:disabled {
+            background: #64748b;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .success-btn {
+            background: linear-gradient(135deg, var(--success-color), #059669);
+        }
+
+        .warning-btn {
+            background: linear-gradient(135deg, var(--warning-color), #d97706);
+        }
+
+        .logs-panel {
+            background: #000;
+            border-radius: 12px;
+            padding: 20px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            border: 1px solid #333;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .log-timestamp {
+            color: #6b7280;
+            font-size: 0.75rem;
+            min-width: 80px;
+        }
+
+        .log-level {
+            min-width: 50px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .log-info { color: var(--success-color); }
+        .log-warning { color: var(--warning-color); }
+        .log-error { color: var(--error-color); }
+        .log-debug { color: #6366f1; }
+
+        .log-message {
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success { background: var(--success-color); }
+        .notification.error { background: var(--error-color); }
+        .notification.info { background: var(--primary-color); }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-color);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <div class="header fade-in">
+            <h1>🚀 HPC Simulation Dashboard</h1>
+            <p class="subtitle">Real-time monitoring and analytics for high-performance computing simulations</p>
+        </div>
+
+        <!-- Authentication Section -->
+        <div class="auth-section fade-in">
+            <div class="auth-form">
+                <input type="text" id="jwtToken" placeholder="Enter JWT Token (from API login)" style="width: 400px;">
+                <button id="authBtn">🔐 Connect</button>
+                <div id="connectionStatus">
+                    <span class="status-indicator status-disconnected"></span>
+                    Disconnected
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Controls -->
+        <div class="controls hidden" id="dashboardControls">
+            <button class="success-btn" id="loadBtn">📊 Load Dashboard</button>
+            <button class="warning-btn" id="createJobBtn">🚀 Create Test Job</button>
+            <button id="refreshBtn">🔄 Refresh</button>
+            <select id="autoRefresh">...</select>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="grid hidden" id="metricsGrid">
+            <!-- User Statistics -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">👤 User Statistics</h3>
+                    <span class="card-icon">📈</span>
+                </div>
+                <div id="userStats">
+                    <div class="metric">
+                        <div class="metric-value" id="totalJobs">-</div>
+                        <div class="metric-label">Total Jobs</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Status -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">🌐 System Status</h3>
+                    <span class="card-icon">⚡</span>
+                </div>
+                <div id="systemStatus">
+                    <div class="metric">
+                        <div class="metric-value" id="activeJobs">-</div>
+                        <div class="metric-label">Active Jobs</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Metrics -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">⚡ Performance</h3>
+                    <span class="card-icon">📊</span>
+                </div>
+                <div id="performanceMetrics">
+                    <div class="metric">
+                        <div class="metric-value" id="avgThroughput">-</div>
+                        <div class="metric-label">Avg Throughput (MB/s)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-time Connection -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">🔗 Real-time Status</h3>
+                    <span class="card-icon">📡</span>
+                </div>
+                <div id="realtimeStatus">
+                    <div class="metric">
+                        <div class="metric-value" id="wsStatus">Disconnected</div>
+                        <div class="metric-label">WebSocket</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid hidden" id="chartsSection">
+            <!-- Job Status Distribution -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">📊 Job Status Distribution</h3>
+                </div>
+                <div class="chart-container">
+                    <canvas id="statusChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Performance Trends -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">📈 Performance Trends</h3>
+                </div>
+                <div class="chart-container">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Jobs Monitoring -->
+        <div class="card hidden" id="jobsSection">
+            <div class="card-header">
+                <h3 class="card-title">🎯 Active Jobs Monitoring</h3>
+                <button id="subscribeBtn">📡 Enable Real-time</button>
+            </div>
+            <div class="job-list" id="jobsList">
+                <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                    <div class="loading"></div>
+                    <p style="margin-top: 10px;">Loading jobs...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Performance Chart -->
+        <div class="card hidden" id="realtimeChartSection">
+            <div class="card-header">
+                <h3 class="card-title">📊 Real-time Performance Monitor</h3>
+                <div>
+                    <button class="warning-btn" id="clearRealtimeBtn">🗑️ Clear</button>
+                </div>
+            </div>
+            <div class="chart-container large">
+                <canvas id="realtimeChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Activity Logs -->
+        <div class="card" id="logsSection">
+            <div class="card-header">
+                <h3 class="card-title">📝 Activity Logs</h3>
+                <button class="warning-btn" id="clearLogsBtn">🗑️ Clear</button>
+            </div>
+            <div class="logs-panel" id="logsPanel">
+                <div class="log-entry">
+                    <span class="log-timestamp">--:--:--</span>
+                    <span class="log-level log-info">INFO</span>
+                    <span class="log-message">Dashboard initialized, waiting for authentication...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notificationContainer"></div>
+
+    <script>
+        // Global State
+        let jwtToken = '';
+        let socket = null;
+        let charts = {};
+        let autoRefreshInterval = null;
+        let realtimeData = {
+            labels: [],
+            throughput: [],
+            latency: [],
+            queueLength: []
+        };
+
+        // Utility Functions
+        function log(message, level = 'info') {
+            const logsPanel = document.getElementById('logsPanel');
+            const timestamp = new Date().toLocaleTimeString();
+            const logClass = `log-${level}`;
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry fade-in';
+            logEntry.innerHTML = `
+                <span class="log-timestamp">${timestamp}</span>
+                <span class="log-level ${logClass}">${level.toUpperCase()}</span>
+                <span class="log-message">${message}</span>
+            `;
+            
+            logsPanel.appendChild(logEntry);
+            logsPanel.scrollTop = logsPanel.scrollHeight;
+        }
+
+        function showNotification(message, type = 'info') {
+            const container = document.getElementById('notificationContainer');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            
+            container.appendChild(notification);
+            
+            setTimeout(() => notification.classList.add('show'), 100);
+            setTimeout(() => {
+                notification.classList.remove('show');
+                setTimeout(() => container.removeChild(notification), 300);
+            }, 3000);
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusEl = document.getElementById('connectionStatus');
+            const indicator = statusEl.querySelector('.status-indicator');
+            
+            indicator.className = `status-indicator status-${status}`;
+            statusEl.innerHTML = `<span class="status-indicator status-${status}"></span>${message}`;
+        }
+
+        function formatNumber(num) {
+            return num ? Number(num).toLocaleString() : '0';
+        }
+
+        function formatDuration(seconds) {
+            if (seconds < 60) return `${seconds}s`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+            return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+        }
+
+        // Authentication
+        async function authenticate() {
+            const token = document.getElementById('jwtToken').value.trim();
+            if (!token) {
+                showNotification('Please enter a JWT token', 'error');
+                return;
+            }
+
+            jwtToken = token;
+            log('🔑 Authenticating with JWT token...', 'info');
+
+            try {
+                // Test GraphQL authentication
+                const response = await fetch('/graphql', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        query: `query TestAuth { me { email firstName } }`
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.errors) {
+                    throw new Error(result.errors[0].message);
+                }
+
+                const user = result.data.me;
+                log(`✅ Authenticated as: ${user.email}`, 'info');
+                updateConnectionStatus('connected', `Connected as ${user.firstName}`);
+                
+                showNotification(`Welcome, ${user.firstName}!`, 'success');
+                
+                // Show dashboard controls
+                document.getElementById('dashboardControls').classList.remove('hidden');
+                document.getElementById('authBtn').textContent = '✅ Connected';
+                document.getElementById('authBtn').disabled = true;
+
+                // Initialize WebSocket
+                initializeWebSocket();
+
+            } catch (error) {
+                log(`❌ Authentication failed: ${error.message}`, 'error');
+                showNotification('Authentication failed', 'error');
+                updateConnectionStatus('disconnected', 'Authentication Failed');
+            }
+        }
+
+        // WebSocket Connection
+        function initializeWebSocket() {
+            // Check if Socket.IO is available
+            if (typeof io === 'undefined') {
+                log('❌ Socket.IO not available - real-time features disabled', 'error');
+                document.getElementById('wsStatus').textContent = 'Unavailable';
+                showNotification('Real-time updates unavailable', 'warning');
+                return;
+            }
+            
+            if (socket) {
+                socket.disconnect();
+            }
+
+            log('🔗 Connecting to WebSocket...', 'info');
+
+            socket = io('ws://localhost:3000', {
+                auth: { token: jwtToken }
+            });
+
+            socket.on('connect', () => {
+                log('✅ WebSocket connected', 'info');
+                document.getElementById('wsStatus').textContent = 'Connected';
+                showNotification('Real-time updates enabled', 'success');
+            });
+
+            socket.on('disconnect', (reason) => {
+                log(`❌ WebSocket disconnected: ${reason}`, 'warning');
+                document.getElementById('wsStatus').textContent = 'Disconnected';
+            });
+
+            socket.on('job-update', (data) => {
+                log(`📡 Job update: ${data.jobId} - ${data.status}`, 'info');
+                updateJobInList(data.jobId, data);
+                
+                if (data.status === 'running' && data.progress) {
+                    addRealtimeDataPoint(data);
+                }
+            });
+
+            socket.on('connect_error', (error) => {
+                log(`💥 WebSocket error: ${error.message}`, 'error');
+            });
+        }
+
+        // Dashboard Data Loading
+        async function loadDashboard() {
+            log('📊 Loading dashboard data...', 'info');
+            document.getElementById('loadBtn').innerHTML = '<span class="loading"></span> Loading...';
+
+            try {
+                const query = `
+                    query Dashboard {
+                        me {
+                            email
+                            firstName
+                            statistics {
+                                totalJobs
+                                completedJobs
+                                runningJobs
+                                failedJobs
+                                avgThroughput
+                            }
+                        }
+                        simulationJobs(limit: 10) {
+                            id
+                            name
+                            status
+                            progress
+                            simulationTime
+                            createdAt
+                            results {
+                                totalThroughput
+                                averageLatency
+                            }
+                        }
+                        topologyTemplates(limit: 5) {
+                            id
+                            name
+                            type
+                        }
+                    }
+                `;
+
+                const response = await graphqlQuery(query);
+                
+                if (response.errors) {
+                    throw new Error(response.errors[0].message);
+                }
+
+                const data = response.data;
+                
+                // Update user statistics
+                updateUserStats(data.me.statistics);
+                
+                // Update jobs list
+                updateJobsList(data.simulationJobs);
+                
+                // Update charts
+                updateStatusChart(data.simulationJobs);
+                updatePerformanceChart(data.simulationJobs);
+                
+                // Show dashboard sections
+                showDashboardSections();
+                
+                log('✅ Dashboard loaded successfully', 'info');
+                showNotification('Dashboard loaded successfully', 'success');
+
+            } catch (error) {
+                log(`❌ Failed to load dashboard: ${error.message}`, 'error');
+                showNotification('Failed to load dashboard', 'error');
+            } finally {
+                document.getElementById('loadBtn').innerHTML = '📊 Load Dashboard';
+            }
+        }
+
+        async function graphqlQuery(query, variables = {}) {
+            const response = await fetch('/graphql', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${jwtToken}`
+                },
+                body: JSON.stringify({ query, variables })
+            });
+            
+            return await response.json();
+        }
+
+        function showDashboardSections() {
+            ['metricsGrid', 'chartsSection', 'jobsSection', 'realtimeChartSection', 'logsSection'].forEach(id => {
+                document.getElementById(id).classList.remove('hidden');
+            });
+        }
+
+        // Update Dashboard Components
+        function updateUserStats(stats) {
+            document.getElementById('totalJobs').textContent = formatNumber(stats.totalJobs);
+            
+            // Create additional metrics
+            const userStatsEl = document.getElementById('userStats');
+            userStatsEl.innerHTML = `
+                <div class="metric">
+                    <div class="metric-value">${formatNumber(stats.totalJobs)}</div>
+                    <div class="metric-label">Total Jobs</div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <div style="display: flex; gap: 20px;">
+                        <div class="metric">
+                            <div class="metric-value" style="font-size: 1.5rem; color: var(--success-color);">${stats.completedJobs}</div>
+                            <div class="metric-label">Completed</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value" style="font-size: 1.5rem; color: var(--primary-color);">${stats.runningJobs}</div>
+                            <div class="metric-label">Running</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-value" style="font-size: 1.5rem; color: var(--error-color);">${stats.failedJobs}</div>
+                            <div class="metric-label">Failed</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('activeJobs').textContent = stats.runningJobs;
+            document.getElementById('avgThroughput').textContent = stats.avgThroughput ? 
+                Number(stats.avgThroughput).toFixed(2) : 'N/A';
+        }
+
+        function updateJobsList(jobs) {
+            const jobsList = document.getElementById('jobsList');
+            
+            if (jobs.length === 0) {
+                jobsList.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                        <p>No jobs found. Create your first simulation!</p>
+                    </div>
+                `;
+                return;
+            }
+
+                            jobsList.innerHTML = jobs.map(job => `
+                <div class="job-item" data-job-id="${job.id}">
+                    <div class="job-info">
+                        <h4>${job.name}</h4>
+                        <p>Created: ${new Date(job.createdAt).toLocaleString()}</p>
+                        <p>Duration: ${formatDuration(job.simulationTime)}</p>
+                    </div>
+                    <div class="job-status">
+                        <div class="status-badge status-${job.status.toLowerCase()}">${job.status}</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${job.progress || 0}%"></div>
+                        </div>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">${job.progress || 0}%</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateJobInList(jobId, updateData) {
+            const jobElement = document.querySelector(`[data-job-id="${jobId}"]`);
+            if (jobElement) {
+                const statusBadge = jobElement.querySelector('.status-badge');
+                const progressFill = jobElement.querySelector('.progress-fill');
+                const progressText = jobElement.querySelector('.job-status span');
+                
+                if (statusBadge) {
+                    statusBadge.className = `status-badge status-${updateData.status.toLowerCase()}`;
+                    statusBadge.textContent = updateData.status;
+                }
+                
+                if (progressFill && updateData.progress) {
+                    progressFill.style.width = `${updateData.progress}%`;
+                    progressText.textContent = `${updateData.progress}%`;
+                }
+            }
+        }
+
+        // Chart Initialization and Updates
+        function initializeCharts() {
+            // Destroy existing charts if they exist
+            Object.values(charts).forEach(chart => {
+                if (chart && typeof chart.destroy === 'function') {
+                    chart.destroy();
+                }
+            });
+            charts = {}; // Reset charts object
+
+            // Job Status Pie Chart
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            charts.statusChart = new Chart(statusCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Completed', 'Running', 'Failed', 'Queued'],
+                    datasets: [{
+                        data: [0, 0, 0, 0],
+                        backgroundColor: [
+                            '#10b981',
+                            '#3b82f6', 
+                            '#ef4444',
+                            '#6b7280'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#f1f5f9' }
+                        }
+                    }
+                }
+            });
+
+            // Performance Trends Line Chart
+            const perfCtx = document.getElementById('performanceChart').getContext('2d');
+            charts.performanceChart = new Chart(perfCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Throughput (MB/s)',
+                        data: [],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Latency (ms)',
+                        data: [],
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        tension: 0.4,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#f1f5f9' }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+
+            // Real-time Performance Chart
+            const realtimeCtx = document.getElementById('realtimeChart').getContext('2d');
+            charts.realtimeChart = new Chart(realtimeCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Throughput (MB/s)',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'Queue Length',
+                        data: [],
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 750,
+                        easing: 'easeInOutQuart'
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#f1f5f9' }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: {
+                            grid: { color: '#334155' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateStatusChart(jobs) {
+            const statusCounts = jobs.reduce((acc, job) => {
+                acc[job.status.toLowerCase()] = (acc[job.status.toLowerCase()] || 0) + 1;
+                return acc;
+            }, {});
+
+            charts.statusChart.data.datasets[0].data = [
+                statusCounts.completed || 0,
+                statusCounts.running || 0,
+                statusCounts.failed || 0,
+                statusCounts.queued || 0
+            ];
+            charts.statusChart.update();
+        }
+
+        function updatePerformanceChart(jobs) {
+            const completedJobs = jobs.filter(job => job.status === 'COMPLETED' && job.results);
+            
+            charts.performanceChart.data.labels = completedJobs.map(job => 
+                new Date(job.createdAt).toLocaleDateString()
+            );
+            charts.performanceChart.data.datasets[0].data = completedJobs.map(job => 
+                job.results.totalThroughput
+            );
+            charts.performanceChart.data.datasets[1].data = completedJobs.map(job => 
+                job.results.averageLatency
+            );
+            charts.performanceChart.update();
+        }
+
+        function addRealtimeDataPoint(jobData) {
+            const now = new Date().toLocaleTimeString();
+            
+            realtimeData.labels.push(now);
+            realtimeData.throughput.push(Math.random() * 100 + 50); // Mock real-time data
+            realtimeData.queueLength.push(Math.floor(Math.random() * 20));
+            
+            // Keep only last 20 data points
+            if (realtimeData.labels.length > 20) {
+                realtimeData.labels.shift();
+                realtimeData.throughput.shift();
+                realtimeData.queueLength.shift();
+            }
+            
+            charts.realtimeChart.data.labels = [...realtimeData.labels];
+            charts.realtimeChart.data.datasets[0].data = [...realtimeData.throughput];
+            charts.realtimeChart.data.datasets[1].data = [...realtimeData.queueLength];
+            charts.realtimeChart.update('none'); // No animation for real-time
+        }
+
+        function clearRealtimeChart() {
+            realtimeData = { labels: [], throughput: [], queueLength: [] };
+            charts.realtimeChart.data.labels = [];
+            charts.realtimeChart.data.datasets[0].data = [];
+            charts.realtimeChart.data.datasets[1].data = [];
+            charts.realtimeChart.update();
+            log('🗑️ Real-time chart cleared', 'info');
+        }
+
+        // Job Management
+        async function createTestJob() {
+            log('🚀 Creating test simulation job...', 'info');
+            document.getElementById('createJobBtn').innerHTML = '<span class="loading"></span> Creating...';
+
+            try {
+                const mutation = `
+                    mutation CreateTestJob {
+                        createSimulationJob(input: {
+                            name: "Dashboard Test Job - ${new Date().toLocaleTimeString()}"
+                            description: "Test job created from interactive dashboard"
+                            topologyId: "1"
+                            workloadId: "1"
+                            simulationTime: 15.0
+                            numComputeNodes: 12
+                            numStorageNodes: 6
+                            workType: READ
+                            dataSizeMb: 256.0
+                            readProbability: 0.7
+                        }) {
+                            id
+                            name
+                            status
+                            progress
+                        }
+                    }
+                `;
+
+                const response = await graphqlQuery(mutation);
+                
+                if (response.errors) {
+                    throw new Error(response.errors[0].message);
+                }
+
+                const job = response.data.createSimulationJob;
+                log(`✅ Job created: ${job.id}`, 'info');
+                showNotification(`Test job created: ${job.name}`, 'success');
+                
+                // Subscribe to job updates
+                if (socket && socket.connected) {
+                    socket.emit('subscribe-job', job.id);
+                    log(`📡 Subscribed to job updates: ${job.id}`, 'info');
+                }
+                
+                // Refresh dashboard
+                setTimeout(() => loadDashboard(), 1000);
+
+            } catch (error) {
+                log(`❌ Failed to create job: ${error.message}`, 'error');
+                showNotification('Failed to create test job', 'error');
+            } finally {
+                document.getElementById('createJobBtn').innerHTML = '🚀 Create Test Job';
+            }
+        }
+
+        function subscribeToAllJobs() {
+            if (!socket || !socket.connected) {
+                showNotification('WebSocket not connected', 'error');
+                return;
+            }
+
+            // Get all job IDs currently displayed
+            const jobElements = document.querySelectorAll('[data-job-id]');
+            jobElements.forEach(el => {
+                const jobId = el.getAttribute('data-job-id');
+                socket.emit('subscribe-job', jobId);
+            });
+
+            log(`📡 Subscribed to ${jobElements.length} job updates`, 'info');
+            showNotification(`Subscribed to ${jobElements.length} jobs`, 'success');
+            
+            document.getElementById('subscribeBtn').innerHTML = '✅ Real-time Active';
+            document.getElementById('subscribeBtn').disabled = true;
+        }
+
+        // Auto-refresh functionality
+        function toggleAutoRefresh() {
+            const interval = parseInt(document.getElementById('autoRefresh').value);
+            
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+
+            if (interval > 0) {
+                autoRefreshInterval = setInterval(() => {
+                    refreshData();
+                }, interval);
+                log(`🔄 Auto-refresh enabled: ${interval/1000}s`, 'info');
+            } else {
+                log('🔄 Auto-refresh disabled', 'info');
+            }
+        }
+
+        async function refreshData() {
+            if (!jwtToken) return;
+            
+            try {
+                const query = `
+                    query RefreshData {
+                        me {
+                            statistics {
+                                totalJobs
+                                completedJobs
+                                runningJobs
+                                failedJobs
+                                avgThroughput
+                            }
+                        }
+                        simulationJobs(limit: 10) {
+                            id
+                            name
+                            status
+                            progress
+                            simulationTime
+                            createdAt
+                            results {
+                                totalThroughput
+                                averageLatency
+                            }
+                        }
+                    }
+                `;
+
+                const response = await graphqlQuery(query);
+                
+                if (!response.errors) {
+                    updateUserStats(response.data.me.statistics);
+                    updateJobsList(response.data.simulationJobs);
+                    updateStatusChart(response.data.simulationJobs);
+                    
+                    log('🔄 Dashboard refreshed', 'debug');
+                }
+
+            } catch (error) {
+                log(`❌ Refresh failed: ${error.message}`, 'error');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('logsPanel').innerHTML = '';
+            log('🗑️ Logs cleared', 'info');
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            // Prevent multiple initializations
+            if (window.dashboardInitialized) {
+              return;
+            }
+            window.dashboardInitialized = true;
+            document.getElementById('logsSection').classList.remove('hidden');
+            // Add event listeners
+            document.getElementById('authBtn').addEventListener('click', authenticate);
+            document.getElementById('loadBtn').addEventListener('click', loadDashboard);
+            document.getElementById('createJobBtn').addEventListener('click', createTestJob);
+            document.getElementById('refreshBtn').addEventListener('click', refreshData);
+            document.getElementById('autoRefresh').addEventListener('change', toggleAutoRefresh);
+            document.getElementById('subscribeBtn').addEventListener('click', subscribeToAllJobs);
+            document.getElementById('clearLogsBtn').addEventListener('click', clearLogs);
+            document.getElementById('clearRealtimeBtn').addEventListener('click', clearRealtimeChart);
+
+            log('🌐 Interactive Dashboard initialized', 'info');
+            log('💡 Enter your JWT token and click Connect to begin', 'info');
+            
+            // Wait for external scripts to load before initializing charts
+            setTimeout(() => {
+                if (typeof Chart !== 'undefined') {
+                    initializeCharts();
+                    log('📊 Charts initialized successfully', 'info');
+                } else {
+                    log('❌ Chart.js not available, charts disabled', 'error');
+                }
+            }, 1000); // Increased delay
+        });
+
+        // Handle page visibility for performance
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                // Pause auto-refresh when tab is not visible
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    log('⏸️ Auto-refresh paused (tab hidden)', 'debug');
+                }
+            } else {
+                // Resume auto-refresh when tab becomes visible
+                toggleAutoRefresh();
+                log('▶️ Auto-refresh resumed (tab visible)', 'debug');
+            }
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (socket) {
+                socket.disconnect();
+            }
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+        });
+
+        // Ensure Chart.js is loaded
+        window.addEventListener('load', function() {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js failed to load');
+                document.body.innerHTML += '<div style="color: red; text-align: center; padding: 20px;">Chart.js failed to load. Please check network connection.</div>';
+            } else {
+                console.log('✅ Chart.js loaded successfully');
+            }
+        });
+    </script>
+</body>
+</html>

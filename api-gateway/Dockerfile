@@ -16,6 +16,7 @@ RUN npm ci
 
 # Copy source code
 COPY src/ ./src/
+COPY public/ ./public/
 
 # Build TypeScript
 RUN npm run build
@@ -37,6 +38,7 @@ WORKDIR /app
 COPY --from=builder --chown=nodeuser:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodeuser:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nodeuser:nodejs /app/package*.json ./
+COPY --from=builder --chown=nodeuser:nodejs /app/public ./public
 
 # Switch to non-root user
 USER nodeuser

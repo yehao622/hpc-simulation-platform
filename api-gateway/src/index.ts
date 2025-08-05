@@ -6,6 +6,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
+import path from 'path';
 import { createServer } from 'http';
 import { Pool } from 'pg';
 
@@ -250,11 +251,24 @@ const configureMiddleware = () => {
       directives: {
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'", "https://cdn.jsdelivr.net", "https://cdn.socket.io"],
+        scriptSrc: [
+          "'self'", 
+          "'unsafe-inline'", 
+          "'unsafe-eval'", 
+          "'unsafe-hashes'", 
+          "https:", "data:", "blob:",
+          "https://cdn.jsdelivr.net",
+          "https://cdnjs.cloudflare.com"
+        ],
+        scriptSrcAttr: ["'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'", "ws:", "wss:"],
+        connectSrc: ["'self'", "ws:", "wss:", "https:", "http:", "data:"],
+        fontSrc: ["'self'", "https:", "data:"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'self'"]
       },
     },
+    crossOriginEmbedderPolicy: false
   }));
 
   // CORS configuration
@@ -273,6 +287,9 @@ const configureMiddleware = () => {
   if (process.env.NODE_ENV !== 'test') {
     app.use(morgan('combined'));
   }
+
+  // Serve static files from public directory
+  app.use(express.static(path.join(__dirname, '../public')));
 
   console.log('🔧 Middleware configured after GraphQL');
 };
@@ -352,6 +369,11 @@ const registerRoutes = () => {
         ...(wsServer && { websocket: '/socket.io/' })
       }
     });
+  });
+
+  // Interactive Dashboard
+  app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, '../public/dashboard.html'));
   });
 
   // API Documentation
@@ -551,6 +573,13 @@ const registerRoutes = () => {
       </body>
       </html>
     `);
+  });
+
+  // Interactive Dashboard
+  app.get('/dashboard', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    // Serve the dashboard HTML file you just created
+    res.sendFile(path.join(__dirname, '../public/dashboard.html'));
   });
 
   console.log('🛣️ API routes registered');

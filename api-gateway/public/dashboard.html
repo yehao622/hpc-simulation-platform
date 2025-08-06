@@ -590,6 +590,7 @@
             latency: [],
             queueLength: []
         };
+        let refreshTimeout = null;
 
         // Utility Functions
         function log(message, level = 'info') {
@@ -702,7 +703,7 @@
                 showNotification('Real-time updates unavailable', 'warning');
                 return;
             }
-            
+
             if (socket) {
                 socket.disconnect();
             }
@@ -725,16 +726,50 @@
             });
 
             socket.on('job-update', (data) => {
-                log(`📡 Job update: ${data.jobId} - ${data.status}`, 'info');
+                log(`📡 Job update: ${data.jobId} - ${data.status} (${data.progress || 0}%)`, 'info');
                 updateJobInList(data.jobId, data);
                 
                 if (data.status === 'running' && data.progress) {
                     addRealtimeDataPoint(data);
                 }
+
+                // Debounced refresh - only refresh after no updates for 2 seconds
+                if (refreshTimeout) {
+                    clearTimeout(refreshTimeout);
+                }
+                setTimeout(() => {
+                    if (jwtToken) {
+                        refreshData();
+                    }
+                }, 2000);
             });
 
             socket.on('connect_error', (error) => {
                 log(`💥 WebSocket error: ${error.message}`, 'error');
+            });
+
+            socket.on('job-status-update', (data) => {
+                log(`📊 Status update: ${data.jobId} - ${data.status} (${data.progress || 0}%)`, 'info');
+                updateJobInList(data.jobId, data);
+                if (data.status === 'running' && data.progress) {
+                    addRealtimeDataPoint(data);
+                }
+                
+                // Refresh charts when job status changes
+                setTimeout(() => {
+                    if (jwtToken) {
+                        refreshData();
+                    }
+                }, 2000);
+            });
+
+            socket.on('active-jobs', (jobs) => {
+                log(`📋 Received ${jobs.length} active jobs`, 'info');
+                // Update active jobs count
+                const activeJobsEl = document.getElementById('activeJobs');
+                if (activeJobsEl) {
+                    activeJobsEl.textContent = jobs.length;
+                }
             });
         }
 
@@ -797,6 +832,7 @@
                 
                 // Show dashboard sections
                 showDashboardSections();
+                initializeCharts(); // Ensure charts are ready before updates
                 
                 log('✅ Dashboard loaded successfully', 'info');
                 showNotification('Dashboard loaded successfully', 'success');
@@ -830,40 +866,58 @@
 
         // Update Dashboard Components
         function updateUserStats(stats) {
-            document.getElementById('totalJobs').textContent = formatNumber(stats.totalJobs);
-            
+            // Add null checks for each element
+            const totalJobsEl = document.getElementById('totalJobs');
+            const activeJobsEl = document.getElementById('activeJobs');
+            const avgThroughputEl = document.getElementById('avgThroughput');
+
+            if (totalJobsEl) {
+                totalJobsEl.textContent = formatNumber(stats.totalJobs);
+            }
+            if (activeJobsEl) {
+                activeJobsEl.textContent = stats.runningJobs || 0;
+            }
+            if (avgThroughputEl) {
+                avgThroughputEl.textContent = stats.avgThroughput ? 
+                    Number(stats.avgThroughput).toFixed(2) : 'N/A';
+            }
+
             // Create additional metrics
             const userStatsEl = document.getElementById('userStats');
-            userStatsEl.innerHTML = `
-                <div class="metric">
-                    <div class="metric-value">${formatNumber(stats.totalJobs)}</div>
-                    <div class="metric-label">Total Jobs</div>
-                </div>
-                <div style="margin-top: 15px;">
-                    <div style="display: flex; gap: 20px;">
-                        <div class="metric">
-                            <div class="metric-value" style="font-size: 1.5rem; color: var(--success-color);">${stats.completedJobs}</div>
-                            <div class="metric-label">Completed</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-value" style="font-size: 1.5rem; color: var(--primary-color);">${stats.runningJobs}</div>
-                            <div class="metric-label">Running</div>
-                        </div>
-                        <div class="metric">
-                            <div class="metric-value" style="font-size: 1.5rem; color: var(--error-color);">${stats.failedJobs}</div>
-                            <div class="metric-label">Failed</div>
+            if (userStatsEl) {
+                userStatsEl.innerHTML = `
+                    <div class="metric">
+                        <div class="metric-value">${formatNumber(stats.totalJobs)}</div>
+                        <div class="metric-label">Total Jobs</div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <div style="display: flex; gap: 20px;">
+                            <div class="metric">
+                                <div class="metric-value" style="font-size: 1.5rem; color: var(--success-color);">${stats.completedJobs || 0}</div>
+                                <div class="metric-label">Completed</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" style="font-size: 1.5rem; color: var(--primary-color);">${stats.runningJobs || 0}</div>
+                                <div class="metric-label">Running</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-value" style="font-size: 1.5rem; color: var(--error-color);">${stats.failedJobs || 0}</div>
+                                <div class="metric-label">Failed</div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            `;
-
-            document.getElementById('activeJobs').textContent = stats.runningJobs;
-            document.getElementById('avgThroughput').textContent = stats.avgThroughput ? 
-                Number(stats.avgThroughput).toFixed(2) : 'N/A';
+                `;
+            }
         }
 
         function updateJobsList(jobs) {
             const jobsList = document.getElementById('jobsList');
+
+            // Add this null check
+            if (!jobsList) {
+                log('❌ Jobs list element not found', 'error');
+                return;
+            }
             
             if (jobs.length === 0) {
                 jobsList.innerHTML = `
@@ -874,7 +928,7 @@
                 return;
             }
 
-                            jobsList.innerHTML = jobs.map(job => `
+            jobsList.innerHTML = jobs.map(job => `
                 <div class="job-item" data-job-id="${job.id}">
                     <div class="job-info">
                         <h4>${job.name}</h4>
@@ -892,27 +946,131 @@
             `).join('');
         }
 
+        function updateJobsListPreservingProgress(jobs) {
+            const jobsList = document.getElementById('jobsList');
+            
+            if (!jobsList) {
+                log('❌ Jobs list element not found', 'error');
+                return;
+            }
+            
+            if (jobs.length === 0) {
+                jobsList.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                        <p>No jobs found. Create your first simulation!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Get current progress values before updating
+            const currentProgress = {};
+            const existingJobs = jobsList.querySelectorAll('[data-job-id]');
+            existingJobs.forEach(jobEl => {
+                const jobId = jobEl.getAttribute('data-job-id');
+                const progressText = jobEl.querySelector('.job-status span');
+                const statusBadge = jobEl.querySelector('.status-badge');
+                if (progressText && statusBadge) {
+                    currentProgress[jobId] = {
+                        progress: parseInt(progressText.textContent) || 0,
+                        status: statusBadge.textContent.toLowerCase()
+                    };
+                }
+            });
+
+            // Rebuild the list
+            jobsList.innerHTML = jobs.map(job => {
+                // Use real-time progress if available, otherwise use database progress
+                const realtimeData = currentProgress[job.id];
+                const displayProgress = realtimeData && realtimeData.status === 'running' ? 
+                    realtimeData.progress : (job.progress || 0);
+                const displayStatus = realtimeData && realtimeData.status === 'running' ? 
+                    'running' : job.status;
+                    
+                return `
+                    <div class="job-item ${displayStatus.toLowerCase()}" data-job-id="${job.id}">
+                        <div class="job-info">
+                            <h4>${job.name}</h4>
+                            <p>Created: ${new Date(job.createdAt).toLocaleString()}</p>
+                            <p>Duration: ${formatDuration(job.simulationTime)}</p>
+                        </div>
+                        <div class="job-status">
+                            <div class="status-badge status-${displayStatus.toLowerCase()}">${displayStatus.toUpperCase()}</div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${displayProgress}%"></div>
+                            </div>
+                            <span style="font-size: 0.8rem; color: var(--text-secondary);">${displayProgress}%</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function updateJobInList(jobId, updateData) {
             const jobElement = document.querySelector(`[data-job-id="${jobId}"]`);
-            if (jobElement) {
-                const statusBadge = jobElement.querySelector('.status-badge');
-                const progressFill = jobElement.querySelector('.progress-fill');
-                const progressText = jobElement.querySelector('.job-status span');
+            if (!jobElement) {
+                log(`⚠️ Job element not found for ID: ${jobId}, will retry after refresh`, 'debug');
+                setTimeout(() => {
+                    if (jwtToken) {
+                        refreshData();
+                        // Try again after refresh
+                        setTimeout(() => {
+                            const retryElement = document.querySelector(`[data-job-id="${jobId}"]`);
+                            if (retryElement) {
+                                updateJobInList(jobId, updateData);
+                            }
+                        }, 500);
+                    }
+                }, 1000);
+                return;
+            }
+
+            const statusBadge = jobElement.querySelector('.status-badge');
+            const progressFill = jobElement.querySelector('.progress-fill');
+            const progressText = jobElement.querySelector('.job-status span');
                 
-                if (statusBadge) {
-                    statusBadge.className = `status-badge status-${updateData.status.toLowerCase()}`;
-                    statusBadge.textContent = updateData.status;
-                }
+            if (statusBadge && updateData.status) {
+                statusBadge.className = `status-badge status-${updateData.status.toLowerCase()}`;
+                statusBadge.textContent = updateData.status.toUpperCase();
+            }
                 
-                if (progressFill && updateData.progress) {
-                    progressFill.style.width = `${updateData.progress}%`;
-                    progressText.textContent = `${updateData.progress}%`;
+            // Update progress bar and text - handle both progress and no progress cases
+            const progress = updateData.progress || 0;
+            
+            if (progressFill) {
+                progressFill.style.width = `${progress}%`;
+                // Add visual feedback for running jobs
+                if (updateData.status === 'running' && progress > 0) {
+                    progressFill.style.background = 'linear-gradient(90deg, var(--warning-color), var(--primary-color))';
+                    progressFill.style.animation = 'pulse 2s infinite';
                 }
             }
+            
+            if (progressText) {
+                progressText.textContent = `${progress}%`;
+                // Show additional status info for running jobs
+                if (updateData.status === 'running') {
+                    progressText.innerHTML = `${progress}% <span style="color: var(--warning-color);">●</span>`;
+                }
+            }
+            
+            // Update the job item class for styling
+            jobElement.className = `job-item ${updateData.status.toLowerCase()}`;
+            
+            log(`🔄 Updated job ${jobId}: ${updateData.status} (${progress}%)`, 'debug');
         }
 
         // Chart Initialization and Updates
         function initializeCharts() {
+            const statusCanvas = document.getElementById('statusChart');
+            const performanceCanvas = document.getElementById('performanceChart');
+            const realtimeCanvas = document.getElementById('realtimeChart');
+            
+            if (!statusCanvas || !performanceCanvas || !realtimeCanvas) {
+                log('❌ Chart canvases not found - charts disabled', 'error');
+                return;
+            }
+
             // Destroy existing charts if they exist
             Object.values(charts).forEach(chart => {
                 if (chart && typeof chart.destroy === 'function') {
@@ -922,7 +1080,7 @@
             charts = {}; // Reset charts object
 
             // Job Status Pie Chart
-            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            const statusCtx = statusCanvas.getContext('2d');
             charts.statusChart = new Chart(statusCtx, {
                 type: 'doughnut',
                 data: {
@@ -951,7 +1109,7 @@
             });
 
             // Performance Trends Line Chart
-            const perfCtx = document.getElementById('performanceChart').getContext('2d');
+            const perfCtx = performanceCanvas.getContext('2d');
             charts.performanceChart = new Chart(perfCtx, {
                 type: 'line',
                 data: {
@@ -1004,7 +1162,7 @@
             });
 
             // Real-time Performance Chart
-            const realtimeCtx = document.getElementById('realtimeChart').getContext('2d');
+            const realtimeCtx = realtimeCanvas.getContext('2d');
             charts.realtimeChart = new Chart(realtimeCtx, {
                 type: 'line',
                 data: {
@@ -1058,6 +1216,12 @@
         }
 
         function updateStatusChart(jobs) {
+            // Add this null check
+            if (!charts.statusChart) {
+                log('❌ Status chart not initialized', 'error');
+                return;
+            }
+
             const statusCounts = jobs.reduce((acc, job) => {
                 acc[job.status.toLowerCase()] = (acc[job.status.toLowerCase()] || 0) + 1;
                 return acc;
@@ -1073,6 +1237,12 @@
         }
 
         function updatePerformanceChart(jobs) {
+            // Add this null check
+            if (!charts.performanceChart) {
+                log('❌ Performance chart not initialized', 'error');
+                return;
+            }
+
             const completedJobs = jobs.filter(job => job.status === 'COMPLETED' && job.results);
             
             charts.performanceChart.data.labels = completedJobs.map(job => 
@@ -1119,7 +1289,11 @@
         // Job Management
         async function createTestJob() {
             log('🚀 Creating test simulation job...', 'info');
-            document.getElementById('createJobBtn').innerHTML = '<span class="loading"></span> Creating...';
+
+            const createBtn = document.getElementById('createJobBtn');
+            if (createBtn) {
+                createBtn.innerHTML = '<span class="loading"></span> Creating...';
+            }
 
             try {
                 const mutation = `
@@ -1156,10 +1330,25 @@
                 
                 // Subscribe to job updates
                 if (socket && socket.connected) {
-                    socket.emit('subscribe-job', job.id);
-                    log(`📡 Subscribed to job updates: ${job.id}`, 'info');
+                    // Wait a bit to ensure job appears in the list first
+                    setTimeout(() => {
+                        socket.emit('subscribe-job', job.id);
+                        log(`📡 Subscribed to job ${job.id} updates`, 'info');
+                    }, 1000);
+                }
+
+                // Request active jobs update
+                if (socket && socket.connected) {
+                    socket.emit('get-active-jobs');
                 }
                 
+                // Refresh dashboard after short delay
+                setTimeout(() => {
+                    if (jwtToken) {
+                        refreshData();
+                    }
+                }, 1500);
+
                 // Refresh dashboard
                 setTimeout(() => loadDashboard(), 1000);
 
@@ -1167,7 +1356,10 @@
                 log(`❌ Failed to create job: ${error.message}`, 'error');
                 showNotification('Failed to create test job', 'error');
             } finally {
-                document.getElementById('createJobBtn').innerHTML = '🚀 Create Test Job';
+                const createBtn = document.getElementById('createJobBtn');
+                if (createBtn) {
+                    createBtn.innerHTML = '🚀 Create Test Job';
+                }
             }
         }
 
@@ -1244,8 +1436,9 @@
                 
                 if (!response.errors) {
                     updateUserStats(response.data.me.statistics);
-                    updateJobsList(response.data.simulationJobs);
+                    updateJobsListPreservingProgress(response.data.simulationJobs);
                     updateStatusChart(response.data.simulationJobs);
+                    updatePerformanceChart(response.data.simulationJobs); 
                     
                     log('🔄 Dashboard refreshed', 'debug');
                 }

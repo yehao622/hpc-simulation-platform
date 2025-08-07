@@ -473,7 +473,7 @@ sudo journalctl -u docker
 
 ## 📞 Contact & Support
 
-**Project Author**: [Your Name]
+**Project Author**: Howard Ye
 - **GitHub**: [@yehao622](https://github.com/yehao622)
 - **Email**: hyedailyuse@gmail.com
 

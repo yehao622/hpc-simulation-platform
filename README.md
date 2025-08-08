@@ -231,7 +231,7 @@ cd hpc-simulation-platform
 ## 📊 Live Demo
 
 ### **🌐 Production Instance**
-- **Live URL**: `http://YOUR_AWS_IP:3000` (deployed on demand)
+- **Live URL**: `http://YOUR_AWS_IP:3000`
 - **Status**: Production Ready
 - **Uptime**: Monitored with health checks
 - **Performance**: Optimized for free tier resources
@@ -478,7 +478,7 @@ sudo journalctl -u docker
 - **Email**: hyedailyuse@gmail.com
 
 ### **Project Links**
-- **Live Demo**: http://3.80.235.163:3000/
+- **Live Demo**:  (deployed on demand)
 - **Documentation**: [docs/](./docs/)
 - **Issues**: [GitHub Issues](https://github.com/yehao622/hpc-simulation-platform/issues)
 

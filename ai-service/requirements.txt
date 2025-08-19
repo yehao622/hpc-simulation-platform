@@ -1,0 +1,44 @@
+# ai-service/requirements.txt
+# SmartOps AI Agent Dependencies - FIXED VERSION
+
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Compatible AI/ML Libraries (Fixed dependency conflicts)
+langchain==0.0.335
+langchain-openai==0.0.2
+langchain-community==0.0.10
+openai==1.6.1
+chromadb==0.4.18
+sentence-transformers==2.2.2
+
+# Database & Cache
+asyncpg==0.29.0
+redis[hiredis]==5.0.1
+psycopg2-binary==2.9.9
+
+# HTTP Client
+httpx==0.25.2
+requests==2.31.0
+
+# Monitoring & Observability
+prometheus-client==0.19.0
+structlog==23.2.0
+
+# Data Processing
+pandas==2.1.4
+numpy==1.25.2
+pydantic==2.5.1
+
+# Utilities
+python-dotenv==1.0.0
+PyYAML==6.0.1
+jinja2==3.1.2
+
+# Development Tools (optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+flake8==6.1.0

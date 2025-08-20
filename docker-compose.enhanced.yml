@@ -1,33 +1,36 @@
 # docker-compose.enhanced.yml
-# Complete SmartOps AI Agent Platform with Monitoring Stack
+# Fixed version with working API Gateway configuration
 
 version: '3.8'
 
 services:
-  # Core Services (Enhanced)
-  
-  # PostgreSQL Database
+  # Core Services
+
+  # PostgreSQL Database (Fixed)
   postgres:
-    image: postgres:14
+    image: postgres:14-alpine
     container_name: smartops-postgres
     environment:
-      POSTGRES_DB: smartops_platform
-      POSTGRES_USER: smartops
-      POSTGRES_PASSWORD: smartops123
+      POSTGRES_DB: hpc_simulation
+      POSTGRES_USER: hpc_user
+      POSTGRES_PASSWORD: hpc_password
+      # Add this for admin tasks
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database:/docker-entrypoint-initdb.d
+      # Add init script if exists
+      - ./api-gateway/database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
     ports:
       - "5432:5432"
     networks:
       - smartops-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U smartops -d smartops_platform"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD-SHELL", "pg_isready -U hpc_user -d hpc_simulation"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Redis Cache & Queue
+  # Redis Cache & Queue (Fixed)
   redis:
     image: redis:7-alpine
     container_name: smartops-redis
@@ -40,111 +43,87 @@ services:
       - smartops-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Enhanced API Gateway with Metrics
+  # API Gateway (Fixed with original working configuration)
   api-gateway:
     build: 
       context: ./api-gateway
       dockerfile: Dockerfile
     container_name: smartops-api-gateway
     environment:
-      - NODE_ENV=production
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=smartops
-      - DB_PASSWORD=smartops123
-      - DB_NAME=smartops_platform
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
-      - PROMETHEUS_ENABLED=true
+      NODE_ENV: development
+      PORT: 3000
+      # Use the original database connection format
+      DATABASE_URL: postgresql://hpc_user:hpc_password@postgres:5432/hpc_simulation
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      CORS_ORIGIN: http://localhost:3000,http://localhost:3001
+      LOG_LEVEL: debug
+      PROMETHEUS_ENABLED: 'true'
     ports:
       - "3000:3000"
+    volumes:
+      - ./api-gateway/src:/app/src
+      - ./api-gateway/package.json:/app/package.json
+      - ./api-gateway/tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    networks:
+      - smartops-network
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - smartops-network
-    volumes:
-      - ./api-gateway/logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Simulation Worker with Metrics
+  # Simulation Worker (Fixed)
   simulation-worker:
     build:
-      #context: ./simulation-worker
       context: .
-      dockerfile: simulation-worker/DockerfileAi
+      dockerfile: ./simulation-worker/DockerfileAi
     container_name: smartops-simulation-worker
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=smartops
-      - DB_PASSWORD=smartops123
-      - DB_NAME=smartops_platform
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - PROMETHEUS_ENABLED=true
+      - DATABASE_URL=postgresql://hpc_user:hpc_password@postgres:5432/hpc_simulation
+      - REDIS_URL=redis://redis:6379
+      - WORKER_CONCURRENCY=2
+    volumes:
+      - ./simulation-worker/src:/app/src
+      - ./results:/app/results
+    networks:
+      - smartops-network
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks:
-      - smartops-network
-    volumes:
-      - ./simulation-worker/logs:/app/logs
-      - ./legacy-simulator:/app/legacy-simulator
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
-      interval: 60s
-      timeout: 15s
-      retries: 3
-      
-  # NEW: AI Service (FastAPI + LangChain)
+
+  # AI Service (Working)
   ai-service:
     build:
       context: ./ai-service
       dockerfile: Dockerfile
     container_name: smartops-ai-service
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=smartops
-      - DB_PASSWORD=smartops123
-      - DB_NAME=smartops_platform
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - PROMETHEUS_URL=http://prometheus:9090
-      - PYTHONPATH=/app
+      - NODE_ENV=development
+      - PORT=8000
     ports:
       - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
       - smartops-network
-    volumes:
-      - ./ai-service/logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # NEW: React Frontend
+  # Frontend (Working)
   frontend:
     build:
       context: ./frontend
@@ -256,7 +235,7 @@ services:
     image: prometheuscommunity/postgres-exporter:v0.13.2
     container_name: smartops-postgres-exporter
     environment:
-      - DATA_SOURCE_NAME=postgresql://smartops:smartops123@postgres:5432/smartops_platform?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://hpc_user:hpc_password@postgres:5432/hpc_simulation?sslmode=disable
     ports:
       - "9187:9187"
     depends_on:

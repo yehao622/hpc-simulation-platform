@@ -1,5 +1,5 @@
-# docker-compose.working.yml
-# Simplified working configuration
+# docker-compose.final.yml
+# Fixed configuration for Java service
 
 version: '3.8'
 
@@ -42,42 +42,25 @@ services:
       timeout: 5s
       retries: 5
 
-  # Java Data Processor Service
+  # Java Data Processor Service - Simplified Configuration
   data-processor:
     build:
       context: ./data-processor
       dockerfile: Dockerfile
     container_name: smartops-data-processor
-    environment:
-      SPRING_PROFILES_ACTIVE: development
-      SERVER_PORT: 8080
-      # Database connection
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: hpc_simulation
-      DB_USER: hpc_user
-      DB_PASSWORD: hpc_password
-      # Redis connection
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_DB: 1
-      # Java settings
-      JAVA_OPTS: "-Xmx512m -Xms256m"
+    # Remove all environment variables that might cause issues
     ports:
       - "8080:8080"
     networks:
       - smartops-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    # Remove database dependencies since we're not using them
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 15s
       retries: 3
-      start_period: 60s
+      start_period: 30s
+    restart: unless-stopped
 
   # Prometheus Monitoring
   prometheus:

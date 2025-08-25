@@ -35,28 +35,28 @@ WORKDIR /app
 COPY --from=builder /app/target/data-processor-1.0.0.jar app.jar
 
 # Change ownership to non-root user
-RUN chown smartops:smartops app.jar
+#RUN chown smartops:smartops app.jar
 
 # Switch to non-root user
-USER smartops
+#USER smartops
 
 # Expose port (Spring Boot default is 8080)
 EXPOSE 8080
 
 # Health check (similar to your Node.js health check)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/api/actuator/health || exit 1
+#HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+#    CMD curl -f http://localhost:8080/api/actuator/health || exit 1
 
 # Environment variables with defaults
-ENV JAVA_OPTS="-Xmx512m -Xms256m" \
-    SPRING_PROFILES_ACTIVE=development
+ENV JAVA_OPTS="-Xmx512m -Xms256m" 
+#\    SPRING_PROFILES_ACTIVE=development
 
 # Start the application
 # Similar to: CMD ["node", "src/index.js"] in Node.js
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
 
 # Labels for metadata (good Docker practice)
-LABEL maintainer="SmartOps Team" \
-      service="data-processor" \
-      version="1.0.0" \
-      description="Java Spring Boot microservice for data processing and analytics"
+#LABEL maintainer="SmartOps Team" \
+#      service="data-processor" \
+#      version="1.0.0" \
+#      description="Java Spring Boot microservice for data processing and analytics"

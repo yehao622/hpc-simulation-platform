@@ -1,17 +1,76 @@
-# prometheus.yml - Minimal configuration
+# monitoring/prometheus.yml
+# Prometheus configuration for SmartOps platform monitoring
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    cluster: 'smartops-platform'
+    environment: 'development'
 
+# Rule files for alerting
+rule_files:
+  - "rules/*.yml"
+
+# Scrape configurations for all services
 scrape_configs:
-  # Java Data Processor
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # Java Data Processor Service (Spring Boot Actuator)
   - job_name: 'data-processor'
     static_configs:
       - targets: ['data-processor:8080']
     metrics_path: '/api/actuator/prometheus'
-    scrape_interval: 30s
+    scrape_interval: 15s
+    scrape_timeout: 10s
 
-  # Prometheus itself
-  - job_name: 'prometheus'
+  # Node.js API Gateway
+  - job_name: 'api-gateway'
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['api-gateway:3000']
+    metrics_path: '/api/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Python AI Service (FastAPI)
+  - job_name: 'ai-service'
+    static_configs:
+      - targets: ['ai-service:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # System metrics via Node Exporter
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+
+  # PostgreSQL metrics (if pg_exporter is added)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+    # This would require postgres_exporter sidecar
+
+  # Redis metrics (if redis_exporter is added)  
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 30s
+    metrics_path: '/metrics'
+    # This would require redis_exporter sidecar
+
+# Optional: Remote write configuration for external monitoring
+# remote_write:
+#   - url: "https://external-prometheus-endpoint"
+#     basic_auth:
+#       username: "real-username"
+#       password: "real-password"

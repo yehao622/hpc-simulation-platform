@@ -1,25 +1,52 @@
 # ai-service/src/main.py
-# SmartOps AI Agent - FastAPI Service
+# SmartOps AI Service - Enhanced with LangChain and RAG
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import uvicorn
 import logging
 import os
-from typing import Optional
+from typing import Optional, Dict, Any, List
 import json
 import asyncio
+from datetime import datetime
+from contextlib import asynccontextmanager
+
+# Import our AI Agent
+from ai_agent import initialize_ai_agent, get_ai_response, get_system_analysis, ai_agent
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
+# Lifespan event handler for startup/shutdown
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("🚀 Starting SmartOps AI Service...")
+    try:
+        await initialize_ai_agent()
+        logger.info("✅ AI Agent initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize AI Agent: {e}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Shutting down SmartOps AI Service...")
+    try:
+        await ai_agent.cleanup()
+        logger.info("✅ AI Agent cleanup completed")
+    except Exception as e:
+        logger.error(f"❌ Error during cleanup: {e}")
+
+# Create FastAPI app with lifespan
 app = FastAPI(
-    title="SmartOps AI Service",
-    description="AI-Powered Monitoring and Analysis Service",
-    version="1.0.0"
+    title="SmartOps AI Agent Service",
+    description="Advanced AI-Powered Monitoring and Analysis Service with LangChain and RAG",
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -33,129 +60,272 @@ app.add_middleware(
 
 # Pydantic models
 class ChatRequest(BaseModel):
-    query: str
-    context: Optional[str] = None
+    query: str = Field(..., description="User query for the AI agent")
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Additional context")
+    include_system_data: bool = Field(default=True, description="Include live system data in response")
 
 class ChatResponse(BaseModel):
-    response: str
-    confidence: float = 0.8
-    sources: list = []
+    response: str = Field(..., description="AI agent response")
+    confidence: float = Field(..., description="Confidence score (0-1)")
+    sources: List[str] = Field(..., description="Data sources used")
+    context_used: bool = Field(..., description="Whether RAG context was used")
+    timestamp: str = Field(..., description="Response timestamp")
+    system_data: Optional[Dict[str, Any]] = Field(default=None, description="Related system data")
 
 class HealthResponse(BaseModel):
     status: str
     version: str
     uptime: str
+    ai_agent_status: str
+    rag_initialized: bool
+    openai_configured: bool
 
-# Mock AI responses for initial deployment
-MOCK_RESPONSES = {
-    "system health": "All services are operational. API Gateway (✅), Database (✅), Redis (✅), Frontend (✅)",
-    "performance": "Current system performance: CPU 15%, Memory 45%, Network 2MB/s. All metrics within normal range.",
-    "alerts": "No critical alerts. 2 info notifications: Prometheus metrics collection active, Grafana dashboards ready.",
-    "metrics": "Key metrics: API response time <50ms, Database connections 8/20, Active jobs 0, Error rate 0.02%",
-    "status": "SmartOps platform is fully operational with all monitoring services active.",
-    "default": "I'm the SmartOps AI monitoring assistant. I can help you analyze system health, performance metrics, and provide insights about your HPC simulation platform. Try asking about 'system health', 'performance', or 'metrics'."
-}
-
-def get_ai_response(query: str) -> str:
-    """Get AI response based on query keywords"""
-    query_lower = query.lower()
-    
-    # Simple keyword matching for mock responses
-    for keyword, response in MOCK_RESPONSES.items():
-        if keyword in query_lower:
-            return response
-    
-    # Default response
-    return MOCK_RESPONSES["default"]
+class SystemAnalysisResponse(BaseModel):
+    analysis: Dict[str, Any]
+    ai_insights: str
+    recommendations: List[str]
+    timestamp: str
 
 # Routes
-@app.get("/", response_model=dict)
+@app.get("/", response_model=Dict[str, Any])
 async def root():
-    """Root endpoint"""
+    """Root endpoint with service information"""
     return {
-        "service": "SmartOps AI Agent",
+        "service": "SmartOps AI Agent Service",
         "status": "operational",
-        "version": "1.0.0",
-        "endpoints": ["/health", "/chat", "/metrics", "/docs"]
+        "version": "2.0.0",
+        "features": [
+            "LangChain Integration",
+            "RAG Knowledge Base", 
+            "Real-time System Analysis",
+            "Multi-service Communication",
+            "HPC Domain Expertise"
+        ],
+        "endpoints": [
+            "/health",
+            "/chat",
+            "/analysis",
+            "/system-summary", 
+            "/metrics",
+            "/agent/status",
+            "/docs"
+        ],
+        "ai_capabilities": {
+            "langchain_agents": True,
+            "rag_system": True,
+            "domain_knowledge": "HPC Simulation Systems",
+            "live_data_integration": True
+        }
     }
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """Health check endpoint"""
-    return HealthResponse(
-        status="healthy",
-        version="1.0.0",
-        uptime="operational"
-    )
+    """Enhanced health check endpoint"""
+    try:
+        ai_status = "operational" if ai_agent else "not_initialized"
+        rag_status = False
+        openai_status = bool(os.getenv("OPENAI_API_KEY"))
+        
+        if ai_agent and ai_agent.rag_system:
+            rag_status = ai_agent.rag_system.knowledge_base_initialized
+            
+        return HealthResponse(
+            status="healthy",
+            version="2.0.0", 
+            uptime="operational",
+            ai_agent_status=ai_status,
+            rag_initialized=rag_status,
+            openai_configured=openai_status
+        )
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return HealthResponse(
+            status="degraded",
+            version="2.0.0",
+            uptime="operational", 
+            ai_agent_status="error",
+            rag_initialized=False,
+            openai_configured=False
+        )
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Chat endpoint for AI monitoring queries"""
+async def chat_endpoint(request: ChatRequest):
+    """Enhanced chat endpoint with LangChain agent integration"""
     try:
-        logger.info(f"Received query: {request.query}")
+        logger.info(f"Processing chat request: {request.query[:100]}...")
         
         # Get AI response
-        response = get_ai_response(request.query)
+        ai_response = await get_ai_response(request.query, request.context)
+        
+        # Get related system data if requested
+        system_data = None
+        if request.include_system_data:
+            try:
+                system_data = await get_system_analysis()
+            except Exception as e:
+                logger.warning(f"Failed to get system data: {e}")
         
         return ChatResponse(
-            response=response,
-            confidence=0.85,
-            sources=["system_metrics", "monitoring_data"]
+            response=ai_response["response"],
+            confidence=ai_response["confidence"],
+            sources=ai_response["sources"],
+            context_used=ai_response.get("context_used", False),
+            timestamp=ai_response["timestamp"],
+            system_data=system_data
         )
-    
+        
     except Exception as e:
-        logger.error(f"Error processing chat request: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Chat endpoint error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing chat request: {str(e)}"
+        )
+
+@app.get("/analysis", response_model=SystemAnalysisResponse)
+async def system_analysis():
+    """Get comprehensive AI-powered system analysis"""
+    try:
+        # Get system data
+        system_data = await get_system_analysis()
+        
+        # Generate AI insights
+        analysis_query = """
+        Analyze the current system state and provide:
+        1. Overall system health assessment
+        2. Performance trends and insights  
+        3. Potential issues or areas for improvement
+        4. Specific recommendations for optimization
+        """
+        
+        ai_response = await get_ai_response(analysis_query, {"system_data": system_data})
+        
+        # Extract recommendations (simplified for mock response)
+        recommendations = [
+            "Monitor memory usage trends over next 24 hours",
+            "Consider job queue optimization for peak hours", 
+            "Review error patterns for performance improvement opportunities",
+            "Implement predictive scaling based on workload patterns"
+        ]
+        
+        return SystemAnalysisResponse(
+            analysis=system_data,
+            ai_insights=ai_response["response"],
+            recommendations=recommendations,
+            timestamp=datetime.now().isoformat()
+        )
+        
+    except Exception as e:
+        logger.error(f"Analysis endpoint error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating system analysis: {str(e)}"
+        )
+
+@app.get("/system-summary")
+async def get_system_summary():
+    """Get real-time system summary with AI insights"""
+    try:
+        return await get_system_analysis()
+    except Exception as e:
+        logger.error(f"System summary error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching system summary: {str(e)}"
+        )
 
 @app.get("/metrics")
-async def get_metrics():
+async def prometheus_metrics():
     """Prometheus metrics endpoint"""
-    # Return Prometheus-formatted metrics
-    return """# HELP ai_service_requests_total Total number of requests
-# TYPE ai_service_requests_total counter
-ai_service_requests_total 42
-
-# HELP ai_service_response_time_seconds Response time in seconds
-# TYPE ai_service_response_time_seconds histogram
-ai_service_response_time_seconds_bucket{le="0.1"} 10
-ai_service_response_time_seconds_bucket{le="0.5"} 35
-ai_service_response_time_seconds_bucket{le="1.0"} 42
-ai_service_response_time_seconds_bucket{le="+Inf"} 42
-ai_service_response_time_seconds_sum 12.5
-ai_service_response_time_seconds_count 42
-
-# HELP ai_service_status Service status (1=healthy, 0=unhealthy)
-# TYPE ai_service_status gauge
-ai_service_status 1
-"""
-
-@app.get("/status")
-async def system_status():
-    """Get system status for monitoring"""
+    # Simplified metrics for now - can be enhanced with prometheus_client
     return {
-        "ai_service": "healthy",
-        "langchain": "mock_mode",
-        "model": "mock_gpt",
-        "capabilities": [
-            "system_monitoring",
-            "performance_analysis", 
-            "anomaly_detection",
-            "natural_language_queries"
-        ],
-        "metrics": {
-            "queries_processed": 42,
-            "avg_response_time": "0.3s",
-            "accuracy": "85%"
+        "ai_requests_total": 0,
+        "ai_response_time_seconds": 0.0,
+        "rag_retrievals_total": 0,
+        "system_analysis_requests_total": 0,
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.post("/agent/retrain")
+async def retrain_agent(background_tasks: BackgroundTasks):
+    """Endpoint to trigger RAG system retraining (background task)"""
+    def retrain():
+        logger.info("Starting RAG system retraining...")
+        # Placeholder for retraining logic
+        logger.info("RAG system retraining completed")
+    
+    background_tasks.add_task(retrain)
+    return {"message": "RAG system retraining started in background"}
+
+@app.get("/agent/status")
+async def agent_status():
+    """Get detailed agent status information"""
+    try:
+        status = {
+            "agent_initialized": ai_agent is not None,
+            "openai_configured": bool(os.getenv("OPENAI_API_KEY")),
+            "rag_system_ready": False,
+            "database_connected": False,
+            "redis_connected": False,
+            "java_service_accessible": False
         }
+        
+        if ai_agent:
+            status["rag_system_ready"] = (
+                ai_agent.rag_system and 
+                ai_agent.rag_system.knowledge_base_initialized
+            )
+            status["database_connected"] = ai_agent.db_pool is not None
+            status["redis_connected"] = ai_agent.redis_client is not None
+            
+            # Test Java service connectivity
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        "http://data-processor:8080/api/health", 
+                        timeout=5.0
+                    )
+                    status["java_service_accessible"] = response.status_code == 200
+            except Exception as conn_error:
+                logger.debug(f"Java service connection test failed: {conn_error}")
+                status["java_service_accessible"] = False
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"Agent status error: {e}")
+        return {"error": str(e)}
+
+# Error handlers
+@app.exception_handler(404)
+async def not_found_handler(request, exc):
+    return {
+        "error": "Endpoint not found", 
+        "available_endpoints": ["/health", "/chat", "/analysis", "/agent/status", "/docs"]
+    }
+
+@app.exception_handler(500)
+async def internal_error_handler(request, exc):
+    logger.error(f"Internal error: {exc}")
+    return {
+        "error": "Internal server error", 
+        "message": "Check logs for details"
     }
 
 if __name__ == "__main__":
+    # Run the service
     port = int(os.getenv("PORT", 8000))
-    logger.info(f"Starting SmartOps AI Service on port {port}")
+    host = os.getenv("HOST", "0.0.0.0")
+    
+    logger.info(f"🚀 Starting SmartOps AI Service on {host}:{port}")
+    logger.info("🤖 LangChain integration ready")
+    logger.info("📚 RAG system will initialize on startup")
+    logger.info("🔗 Multi-service communication enabled")
+    
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
+        host=host,
         port=port,
-        reload=False,
-        access_log=True
+        reload=True,
+        log_level="info"
     )

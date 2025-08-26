@@ -1,17 +1,19 @@
 # ai-service/requirements.txt
-# SmartOps AI Agent Dependencies - FIXED VERSION
+# SmartOps AI Agent Dependencies - LangChain Integration
 
 # Web Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
-# Compatible AI/ML Libraries (Fixed dependency conflicts)
-langchain==0.0.335
-langchain-openai==0.0.2
-langchain-community==0.0.10
-openai==1.6.1
-chromadb==0.4.18
+# LangChain Core - Updated for better compatibility
+langchain==0.1.0
+langchain-openai==0.0.5
+langchain-community==0.0.15
+openai==1.10.0
+
+# Vector Database and Embeddings
+chromadb==0.4.22
 sentence-transformers==2.2.2
 
 # Database & Cache
@@ -26,19 +28,23 @@ aiohttp==3.9.1
 
 # Monitoring & Observability
 prometheus-client==0.19.0
-structlog==23.2.0
+#structlog==23.2.0
 
 # Data Processing
 pandas==2.1.4
 numpy==1.25.2
 pydantic==2.5.1
 
+# Text Processing for RAG
+tiktoken==0.5.2
+#nltk==3.8.1
+
 # Utilities
 python-dotenv==1.0.0
 PyYAML==6.0.1
 jinja2==3.1.2
 
-# Development Tools (optional)
+# Development Tools
 pytest==7.4.3
 pytest-asyncio==0.21.1
 black==23.11.0

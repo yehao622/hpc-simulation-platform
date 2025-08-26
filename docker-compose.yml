@@ -41,6 +41,98 @@ services:
       timeout: 5s
       retries: 5
 
+  ai-service:
+    build: 
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: smartops-ai-service
+    environment:
+      # Database connections
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: hpc_user
+      POSTGRES_PASSWORD: hpc_password
+      POSTGRES_DB: hpc_simulation
+      
+      # Redis connection
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      
+      # AI Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_MODEL: gpt-3.5-turbo
+      RAG_CHUNK_SIZE: 1000
+      RAG_CHUNK_OVERLAP: 100
+      
+      # Service configuration
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: info
+      
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-service/chroma_db:/app/chroma_db  # Persist vector database
+      - ./ai-service/logs:/app/logs            # Persist logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s  # Allow time for AI initialization
+    restart: unless-stopped
+    networks:
+      - hpc-network
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 2G      # Increased for LangChain + vector database
+    #       cpus: '1.0'
+    #     reservations:
+    #       memory: 1G
+    #       cpus: '0.5'
+
+  data-processor:
+    build: 
+      context: ./data-processor
+      dockerfile: Dockerfile
+    container_name: smartops-data-processor
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/hpc_simulation
+      SPRING_DATASOURCE_USERNAME: hpc_user
+      SPRING_DATASOURCE_PASSWORD: hpc_password
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SERVER_PORT: 8080
+      LOGGING_LEVEL_COM_SMARTOPS: INFO
+    ports:
+      - "8081:8080"  # Mapped to 8081 to avoid conflicts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+    networks:
+      - hpc-network
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 1G
+    #       cpus: '0.5'
+
   # API Gateway
   api-gateway:
     build:
@@ -54,6 +146,8 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       CORS_ORIGIN: http://localhost:3000,http://localhost:3001
+      AI_SERVICE_URL: http://ai-service:8000
+      JAVA_SERVICE_URL: http://data-processor:8080
       LOG_LEVEL: debug
     ports:
       - "3000:3000"
@@ -69,11 +163,36 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      ai-service:
+        condition: service_healthy
+      data-processor:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 90s 
+    restart: unless-stopped
+
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smartops-frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:3000
+      REACT_APP_AI_SERVICE_URL: http://localhost:8000
+      REACT_APP_JAVA_SERVICE_URL: http://localhost:8081
+    ports:
+      - "3001:80"
+    depends_on:
+      - api-gateway
+      - ai-service
+      - data-processor
+    restart: unless-stopped
+    networks:
+      - hpc-network
 
   # Simulation Worker (OMNeT++ Container)
   simulation-worker:
@@ -99,10 +218,10 @@ services:
         condition: service_healthy
     deploy:
       replicas: 1
-      resources:
-        limits:
-          memory: 2G
-          cpus: '1.0'
+      # resources:
+      #   limits:
+      #     memory: 2G
+      #     cpus: '1.0'
 
   # pgAdmin for database management (development only)
   pgadmin:
@@ -129,7 +248,7 @@ services:
     environment:
       REDIS_HOSTS: local:redis:6379
     ports:
-      - "8081:8081"
+      - "8082:8081"
     networks:
       - hpc-network
     depends_on:
@@ -141,6 +260,13 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: hpc-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
     ports:
       - "9090:9090"
     volumes:
@@ -150,6 +276,7 @@ services:
       - hpc-network
     profiles:
       - monitoring
+    restart: unless-stopped
 
   # Grafana for visualization (monitoring)
   grafana:
@@ -157,8 +284,10 @@ services:
     container_name: hpc-grafana
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: smartops123
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
     ports:
-      - "3001:3000"
+      - "3002:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
@@ -169,14 +298,21 @@ services:
       - prometheus
     profiles:
       - monitoring
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   pgadmin_data:
+    driver: local
   grafana_data:
+    driver: local
   prometheus_data:
+    driver: local
   simulation_results:
+    driver: local
 
 networks:
   hpc-network:

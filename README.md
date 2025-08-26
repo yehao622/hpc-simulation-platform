@@ -1,120 +1,175 @@
-# 🚀 HPC Simulation Platform
+# SmartOps AI Agent Platform
 
-A **production-ready**, cloud-native platform for running High-Performance Computing network simulations. Built with modern web technologies and deployed on AWS, showcasing full-stack development, DevOps, and system design skills.
+**Enterprise-grade AI-powered analytics platform** combining High-Performance Computing simulations with advanced LangChain AI agents and multi-service architecture. Built with modern web technologies and production-ready deployment.
 
 ![Platform Status](https://img.shields.io/badge/Status-Production%20Ready-success)
-![AWS Deployment](https://img.shields.io/badge/AWS-Deployed-orange)
+![Sessions Complete](https://img.shields.io/badge/Sessions%20Complete-7%2F7-success)
+![AI Integration](https://img.shields.io/badge/AI%20Agent-LangChain%20%2B%20RAG-blue)
+![AWS Deployment](https://img.shields.io/badge/AWS-Ready-orange)
 ![Docker](https://img.shields.io/badge/Docker-Containerized-blue)
-![Node.js](https://img.shields.io/badge/Node.js-18.x-green)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14-blue)
+![Architecture](https://img.shields.io/badge/Architecture-Microservices-orange)
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [🏗️ Architecture Overview](#️-architecture-overview)
-- [✨ Features](#-features)
-- [🛠️ Technology Stack](#️-technology-stack)
-- [🚀 Quick Start (Local)](#-quick-start-local)
-- [☁️ AWS Deployment](#️-aws-deployment)
-- [📊 Live Demo](#-live-demo)
-- [🧪 API Testing](#-api-testing)
-- [🌐 Web Interface](#-web-interface)
-- [📁 Project Structure](#-project-structure)
-- [🔧 Development](#-development)
-- [📈 Monitoring](#-monitoring)
-- [🤝 Contributing](#-contributing)
+- [Architecture Overview](#architecture-overview)
+- [Features](#features)
+- [AI Agent Capabilities](#ai-agent-capabilities)
+- [Technology Stack](#technology-stack)
+- [Quick Start (Local)](#quick-start-local)
+- [AWS Deployment](#aws-deployment)
+- [Live Demo](#live-demo)
+- [API Testing](#api-testing)
+- [Web Interface](#web-interface)
+- [Project Structure](#project-structure)
+- [Development](#development)
+- [Monitoring](#monitoring)
+- [Contributing](#contributing)
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
+### Multi-Service AI Platform
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Client    │────│   API Gateway   │────│ Simulation      │
-│  (React/HTML)   │    │  (Node.js +     │    │ Worker          │
-│                 │    │   Express)      │    │ (Python +       │
-└─────────────────┘    └─────────────────┘    │  OMNeT++)       │
-                                │              └─────────────────┘
-                       ┌─────────────────┐               │
-                       │   PostgreSQL    │               │
-                       │   Database      │───────────────┘
+│   Web Client    │────│   API Gateway   │────│ AI Agent        │
+│  (React/HTML)   │    │  (Node.js +     │    │ (Python +       │
+│                 │    │   Express)      │    │  LangChain)     │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                               │                       │
+                       ┌─────────────────┐    ┌─────────────────┐
+                       │ Java Analytics  │    │   Simulation    │
+                       │ (Spring Boot)   │    │   Worker        │
+                       │                 │    │ (Python +       │
+                       └─────────────────┘    │  OMNeT++)       │
+                               │              └─────────────────┘
+                       ┌─────────────────┐              │
+                       │   PostgreSQL    │              │
+                       │   Database      │──────────────┘
                        └─────────────────┘
-                                │
+                               │
                        ┌─────────────────┐
                        │   Redis Cache   │
                        │   & Queue       │
                        └─────────────────┘
+                               │
+                       ┌─────────────────┐
+                       │   ChromaDB      │
+                       │ Vector Database │
+                       └─────────────────┘
 ```
 
-**Microservices Architecture:**
-- **API Gateway**: RESTful APIs with authentication and validation
-- **Web Interface**: Interactive dashboard with real-time monitoring  
+**Enhanced Microservices Architecture:**
+- **API Gateway**: RESTful APIs with authentication, GraphQL, WebSocket
+- **AI Agent**: LangChain-powered intelligent analysis with RAG system
+- **Java Analytics**: Spring Boot service with comprehensive metrics
+- **Web Interface**: React dashboard with real-time AI chat
 - **Simulation Engine**: HPC job processing with queue management
 - **Database Layer**: PostgreSQL with optimized schemas
-- **Caching Layer**: Redis for performance and job queuing
+- **Vector Database**: ChromaDB for AI knowledge and semantic search
+- **Monitoring**: Prometheus + Grafana observability stack
 
-## ✨ Features
+## Features
 
-### 🔐 **Authentication & Security**
+### Authentication & Security
 - JWT-based authentication with secure password hashing
 - User registration and profile management
 - Protected API routes with role-based access
 - Input validation and SQL injection prevention
 
-### 🎯 **Simulation Management**
+### AI-Powered Analytics (NEW)
+- **Real LangChain Agent**: OpenAI-powered intelligent system analysis
+- **RAG Knowledge System**: Domain expertise with semantic search
+- **Cross-Service Intelligence**: AI analysis of live Java analytics data
+- **Intelligent Recommendations**: Context-aware optimization suggestions
+- **Natural Language Interface**: Chat with your system using plain English
+
+### Simulation Management
 - Interactive job submission with real-time feedback
 - Multiple simulation templates (Fat-tree, Mesh, Custom topologies)
 - Real-time job status tracking (Queued → Running → Completed)
 - Comprehensive job history and analytics
 
-### 📊 **Analytics & Monitoring**
-- Live performance metrics (throughput, latency, queue length)
-- Real-time job progress visualization
-- System health monitoring with status dashboards
-- Historical data analysis and reporting
+### Advanced Monitoring & Observability (NEW)
+- **Prometheus**: Comprehensive metrics collection from all services
+- **Grafana**: Professional dashboards with custom visualizations
+- **Real-time Health**: Live system status and performance monitoring
+- **Service Mesh**: Cross-service communication and health tracking
+- **AI-Enhanced Insights**: Intelligent interpretation of system metrics
 
-### 🌐 **Professional Web Interface**
-- Modern, responsive design with dark theme
-- Interactive dashboard with live updates
-- One-click job creation and monitoring
-- Mobile-friendly responsive layout
+### Professional Web Interface
+- Modern React dashboard with AI chat interface
+- Interactive real-time monitoring with live updates
+- One-click job creation and intelligent monitoring
+- Mobile-friendly responsive design with professional UX
+- Dark theme with gradient backgrounds and smooth animations
 
-### 🏗️ **Production Infrastructure**
-- Docker containerization with multi-service orchestration
-- AWS cloud deployment on free tier
-- Health checks and automatic service recovery
-- Scalable architecture ready for enterprise deployment
+### Production Infrastructure
+- Multi-language microservices (Node.js + Python + Java)
+- Docker containerization with health checks and auto-restart
+- AWS cloud deployment ready with optimized configurations
+- Scalable architecture supporting horizontal scaling
 
-## 🛠️ Technology Stack
+## AI Agent Capabilities
 
-### **Backend**
-- **Node.js 18.x** with Express.js framework
-- **TypeScript** for type safety and better development experience
+### Intelligent System Analysis
+- **Real-time Health Monitoring**: AI-powered analysis of system performance
+- **Performance Analytics**: Intelligent interpretation of metrics and trends
+- **Cross-Service Integration**: Dynamic analysis of Java analytics data
+- **Predictive Insights**: Trend identification and bottleneck prediction
+
+### Advanced AI Features
+- **LangChain Integration**: Production-ready agent with function calling
+- **RAG Knowledge System**: HPC domain expertise with semantic search
+- **Natural Language Processing**: Context-aware query understanding
+- **Live Data Integration**: Real-time analysis of system state
+- **Intelligent Fallback**: Enhanced mock mode for uninterrupted operation
+
+### AI Service Endpoints
+```bash
+# AI chat interface
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the current system health?"}'
+
+# Comprehensive system analysis
+curl http://localhost:8000/analysis
+
+# Agent status and capabilities
+curl http://localhost:8000/agent/status
+```
+
+## Technology Stack
+
+### AI & Machine Learning (NEW)
+- **LangChain**: Agent framework with function calling and memory
+- **OpenAI Integration**: GPT-3.5-turbo with intelligent fallback
+- **ChromaDB**: Vector database for semantic search and knowledge retrieval
+- **RAG System**: Retrieval Augmented Generation with HPC domain expertise
+
+### Backend Services
+- **Node.js 18.x** with Express.js framework and TypeScript
+- **Python FastAPI**: AI agent service with comprehensive endpoints
+- **Java Spring Boot**: Analytics microservice with enterprise features
 - **PostgreSQL 14** with optimized schemas and relationships
-- **Redis 7** for caching and job queue management
-- **JWT & bcrypt** for authentication and password security
+- **Redis 7** for caching, job queue management, and real-time communication
 
-### **Frontend**
+### Frontend & Monitoring
+- **React + TypeScript**: Modern dashboard with AI chat interface
 - **Modern HTML5/CSS3** with responsive design
-- **Vanilla JavaScript** with async/await patterns
-- **Chart.js** for data visualization (ready for integration)
-- **WebSocket** support for real-time updates
+- **WebSocket**: Real-time updates and interactive features
+- **Prometheus + Grafana**: Enterprise monitoring and visualization
 
-### **Infrastructure**
+### Infrastructure
 - **Docker & Docker Compose** for containerization
 - **AWS EC2** for cloud hosting
 - **GitHub** for version control and CI/CD ready
-- **Bash scripting** for deployment automation
+- **Health Checks**: Comprehensive service monitoring and auto-recovery
 
-### **Development Tools**
-- **Comprehensive API testing** with curl and validation scripts
-- **Health monitoring** with custom endpoints
-- **Structured logging** for debugging and monitoring
-- **Professional documentation** and development workflow
-
-## 🚀 Quick Start (Local)
+## Quick Start (Local)
 
 ### Prerequisites
 - Docker & Docker Compose (latest version)
 - Git
-- 4GB+ RAM recommended
+- 8GB+ RAM recommended (for AI services)
 
 ### 1. Clone Repository
 ```bash
@@ -122,39 +177,59 @@ git clone https://github.com/yehao622/hpc-simulation-platform.git
 cd hpc-simulation-platform
 ```
 
-### 2. Start All Services
+### 2. Configure Environment
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit configuration (optional - has intelligent fallbacks)
+# Add your OpenAI API key for full AI capabilities:
+# OPENAI_API_KEY=your_api_key_here
+```
+
+### 3. Start All Services
 ```bash
 # Start the complete platform
 docker-compose up -d
+
+# Start monitoring services (optional)
+docker-compose --profile monitoring up -d
 
 # Check service status
 docker-compose ps
 
 # View logs
-docker-compose logs -f api-gateway
+docker-compose logs -f ai-service
 ```
 
-### 3. Verify Installation
+### 4. Verify Installation
 ```bash
-# Health check
-curl http://localhost:3000/api/health
+# Health check all services
+curl http://localhost:8000/health    # AI Agent
+curl http://localhost:8081/health    # Java Analytics
+curl http://localhost:3000/api/health # API Gateway
 
-# Expected response:
-# {"status":"healthy","timestamp":"...","services":{"database":"connected","api":"running"}}
+# Test AI capabilities
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"query": "System status"}'
 ```
 
-### 4. Access the Platform
-- **Web Dashboard**: http://localhost:3000
-- **API Health**: http://localhost:3000/api/health
-- **Demo Login**: `demo@example.com` / `demo123`
+### 5. Access the Platform
+- **Web Dashboard**: http://localhost:3001 - React with AI chat
+- **API Gateway**: http://localhost:3000 - GraphQL + REST
+- **AI Agent**: http://localhost:8000 - LangChain service
+- **Java Analytics**: http://localhost:8081 - Spring Boot APIs
+- **Grafana**: http://localhost:3002 - Dashboards (admin/smartops123)
+- **Prometheus**: http://localhost:9090 - Metrics collection
 
-## ☁️ AWS Deployment
+## AWS Deployment
 
-### 🎯 **Live Production Deployment**
+### Live Production Deployment
 
-This platform is **production-ready** and deployed on AWS Free Tier, demonstrating real-world cloud deployment skills.
+This platform is **production-ready** and optimized for AWS Free Tier, demonstrating real-world cloud deployment skills with enterprise monitoring.
 
-### **Quick AWS Setup**
+### Quick AWS Setup
 
 #### 1. Prerequisites
 ```bash
@@ -169,37 +244,39 @@ aws configure
 #### 2. Launch EC2 Instance
 ```bash
 # Create security group
-aws ec2 create-security-group --group-name hpc-platform-sg --description "HPC Platform Security Group"
+aws ec2 create-security-group --group-name smartops-platform-sg --description "SmartOps AI Platform Security Group"
 
 # Open necessary ports
-aws ec2 authorize-security-group-ingress --group-name hpc-platform-sg --protocol tcp --port 22 --cidr 0.0.0.0/0
-aws ec2 authorize-security-group-ingress --group-name hpc-platform-sg --protocol tcp --port 80 --cidr 0.0.0.0/0  
-aws ec2 authorize-security-group-ingress --group-name hpc-platform-sg --protocol tcp --port 3000 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-name smartops-platform-sg --protocol tcp --port 22 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-name smartops-platform-sg --protocol tcp --port 80 --cidr 0.0.0.0/0  
+aws ec2 authorize-security-group-ingress --group-name smartops-platform-sg --protocol tcp --port 3000-3002 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-name smartops-platform-sg --protocol tcp --port 8000-8081 --cidr 0.0.0.0/0
+aws ec2 authorize-security-group-ingress --group-name smartops-platform-sg --protocol tcp --port 9090 --cidr 0.0.0.0/0
 
 # Create SSH key pair
-aws ec2 create-key-pair --key-name hpc-platform-key --query 'KeyMaterial' --output text > ~/.ssh/hpc-platform-key.pem
-chmod 400 ~/.ssh/hpc-platform-key.pem
+aws ec2 create-key-pair --key-name smartops-platform-key --query 'KeyMaterial' --output text > ~/.ssh/smartops-platform-key.pem
+chmod 400 ~/.ssh/smartops-platform-key.pem
 
 # Launch t3.micro instance (free tier)
 aws ec2 run-instances \
   --image-id ami-0c12c782c6284b66c \
   --count 1 \
   --instance-type t3.micro \
-  --key-name hpc-platform-key \
-  --security-groups hpc-platform-sg \
-  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=HPC-Platform}]'
+  --key-name smartops-platform-key \
+  --security-groups smartops-platform-sg \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=hpc-simulation-platform}]'
 ```
 
 #### 3. Deploy Platform
 ```bash
 # Get instance public IP
 PUBLIC_IP=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=HPC-Platform" \
+  --filters "Name=tag:Name,Values=hpc-simulation-platform" \
   --query 'Reservations[0].Instances[0].PublicIpAddress' \
   --output text)
 
 # SSH to instance
-ssh -i ~/.ssh/hpc-platform-key.pem ec2-user@$PUBLIC_IP
+ssh -i ~/.ssh/smartops-platform-key.pem ec2-user@$PUBLIC_IP
 
 # Install Docker and dependencies
 sudo yum update -y
@@ -217,205 +294,279 @@ git clone https://github.com/yehao622/hpc-simulation-platform.git
 cd hpc-simulation-platform
 
 # Deploy with production configuration
-./deploy-production.sh
+docker-compose up -d
+docker-compose --profile monitoring up -d
 ```
 
-### **Production Features**
-- ✅ **Memory-optimized** for free tier (t3.micro)
-- ✅ **Auto-restart** containers with health checks  
-- ✅ **Resource limits** to prevent OOM issues
-- ✅ **Security groups** configured properly
-- ✅ **SSL-ready** for custom domains
-- ✅ **Monitoring** with health endpoints
+### Production Features
+- Memory-optimized for free tier (t3.micro) with AI workloads
+- Auto-restart containers with comprehensive health checks  
+- Resource limits preventing OOM issues across all services
+- Security groups configured for all service endpoints
+- SSL-ready configuration for custom domains
+- Enterprise monitoring with Prometheus + Grafana
 
-## 📊 Live Demo
+## Live Demo
 
-### **🌐 Production Instance**
-- **Live URL**: `http://YOUR_AWS_IP:3000`
-- **Status**: Production Ready
-- **Uptime**: Monitored with health checks
-- **Performance**: Optimized for free tier resources
+### Production Instance
+- **Live URL**: `http://YOUR_AWS_IP:3001`
+- **Status**: Production Ready with AI capabilities
+- **Uptime**: Monitored with health checks across 8 services
+- **Performance**: Optimized for free tier with intelligent resource management
 
-### **Demo Credentials**
+### Demo Credentials
 ```
 Email: demo@example.com
 Password: demo123
 ```
 
-### **What You Can Demo**
-1. **Interactive Web Interface** - Professional dashboard with real-time updates
-2. **User Authentication** - JWT-based login/registration system
-3. **Job Management** - Create, monitor, and track simulation jobs
-4. **Real-time Updates** - Watch jobs progress from queued to completed
-5. **System Monitoring** - Live health checks and performance metrics
-6. **Mobile Responsive** - Works perfectly on all devices
+### What You Can Demo
+1. **AI Chat Interface** - Interact with LangChain agent for system analysis
+2. **Interactive Dashboard** - Professional React interface with real-time updates
+3. **User Authentication** - JWT-based login/registration system
+4. **Job Management** - Create, monitor, and track simulation jobs with AI insights
+5. **Real-time Analytics** - Watch AI analyze live system metrics
+6. **System Monitoring** - Comprehensive Grafana dashboards and Prometheus metrics
+7. **Multi-Service Architecture** - Demonstrate microservices communication
+8. **Mobile Responsive** - Works perfectly on all devices with modern UX
 
-## 🧪 API Testing
+## API Testing
 
-### **Quick API Tests**
-
+### AI Agent APIs (NEW)
 ```bash
 # Set your deployment URL
 API_URL="http://YOUR_IP:3000"  # Use localhost:3000 for local
+AI_URL="http://YOUR_IP:8000"   # Use localhost:8000 for local
 
-# 1. Health Check
+# 1. AI Agent Health
+curl $AI_URL/health
+
+# 2. AI Chat Interface
+curl -X POST $AI_URL/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "What is the system health?", "include_system_data": true}'
+
+# 3. System Analysis
+curl $AI_URL/analysis
+
+# 4. Agent Status
+curl $AI_URL/agent/status
+
+# 5. Java Analytics Integration
+curl http://YOUR_IP:8081/api/analytics/dashboard
+```
+
+### Core Platform APIs
+```bash
+# 6. Health Check
 curl $API_URL/api/health
 
-# 2. User Registration  
+# 7. User Registration  
 curl -X POST $API_URL/api/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"test@example.com","password":"test123","firstName":"Test","lastName":"User"}'
 
-# 3. User Login
+# 8. User Login
 curl -X POST $API_URL/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"test@example.com","password":"test123"}'
 
-# 4. Create Simulation Job
+# 9. Create Simulation Job
 curl -X POST $API_URL/api/v1/simulations \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Test Simulation","description":"API test job"}'
+  -d '{"name":"AI-Enhanced Simulation","description":"Testing AI integration"}'
 
-# 5. List Jobs
+# 10. List Jobs with AI Analysis
 curl $API_URL/api/v1/simulations
 ```
 
-### **Expected Results**
-- ✅ All endpoints return proper JSON responses
-- ✅ Authentication generates valid JWT tokens  
-- ✅ Jobs progress from 'running' to 'completed' automatically
-- ✅ Real-time metrics are generated and stored
+### Expected Results
+- All endpoints return proper JSON responses with enhanced AI data
+- Authentication generates valid JWT tokens with proper security
+- AI agent provides intelligent system analysis using live data
+- Jobs progress with real-time AI-powered monitoring
+- Cross-service communication demonstrates microservices architecture
 
-## 🌐 Web Interface
+## Web Interface
 
-### **Professional Dashboard Features**
+### Professional Dashboard Features
 
-#### **🎨 User interface Design**
-- Dark theme with gradient backgrounds
-- Responsive layout for all screen sizes
-- Interactive elements with hover effects
-- Professional typography and spacing
+#### Modern AI-Enhanced Design
+- React-based dashboard with AI chat interface
+- Dark theme with professional gradients and animations
+- Responsive layout optimized for all screen sizes
+- Interactive AI chat panel with context-aware responses
+- Real-time metrics visualization with intelligent insights
 
-#### **⚡ Real-time Functionality** 
-- Live job status updates without page refresh
-- Interactive job creation with immediate feedback
-- System health monitoring with live indicators
-- Auto-refreshing metrics and statistics
+#### Advanced Real-time Functionality 
+- AI-powered system analysis with natural language queries
+- Live job status updates with predictive insights
+- Interactive job creation with AI recommendations
+- Intelligent system health monitoring with proactive alerts
+- Auto-refreshing analytics with AI-enhanced interpretation
 
-#### **📱 Mobile-First Approach**
-- Touch-friendly interface design
-- Responsive navigation and layouts
-- Optimized for mobile performance
-- Cross-browser compatibility
+#### Enterprise User Experience
+- Touch-friendly interface design with professional UX patterns
+- Responsive navigation optimized for mobile and desktop
+- Cross-browser compatibility with modern web standards
+- Comprehensive AI chat interface for system interaction
 
-### **User Experience Flow**
-1. **Landing Page** - Clean, professional introduction
-2. **Authentication** - Quick login with demo account
-3. **Dashboard** - Overview of jobs and system status
-4. **Job Creation** - One-click simulation launching
-5. **Monitoring** - Real-time job progress tracking
-6. **Analytics** - Performance metrics and historical data
+### Enhanced User Experience Flow
+1. **Landing Page** - Clean, professional introduction with AI capabilities
+2. **Authentication** - Quick login with secure JWT implementation
+3. **AI Dashboard** - Overview with intelligent system analysis
+4. **AI Chat Interface** - Natural language system interaction
+5. **Job Management** - AI-enhanced creation and monitoring
+6. **Real-time Monitoring** - Live progress with predictive insights
+7. **Analytics** - AI-powered performance metrics and recommendations
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 hpc-simulation-platform/
-├── 📁 api-gateway/                 # Main API service
-│   ├── 📁 src/                     # Source code
+├── ai-service/                     # AI Agent (Python + FastAPI)
+│   ├── src/
+│   │   ├── main.py                 # FastAPI application
+│   │   ├── ai_agent.py             # LangChain agent implementation
+│   │   └── requirements.txt        # Python dependencies
+│   ├── chroma_db/                  # Vector database storage
+│   ├── logs/                       # AI service logs
+│   └── Dockerfile                  # AI service container
+│
+├── data-processor/                 # Analytics (Java + Spring Boot)
+│   ├── src/main/java/com/smartops/
+│   │   └── controller/             # REST controllers
+│   ├── pom.xml                     # Maven dependencies
+│   └── Dockerfile                  # Java service container
+│
+├── api-gateway/                    # Main API service
+│   ├── src/                        # Source code
 │   │   ├── controllers/            # API route handlers
 │   │   ├── middleware/             # Authentication & validation
 │   │   ├── models/                 # Database models
-│   │   └── websocket/              # WebSocket server
-│   ├── 📁 public/                  # Static web files
+│   │   ├── websocket/              # WebSocket server
+│   │   └── graphql/                # GraphQL schema and resolvers
+│   ├── public/                     # Static web files
 │   │   ├── dashboard.html          # Interactive dashboard
 │   │   └── index.html              # Landing page
-│   ├── 📁 database/                # Database schemas
+│   ├── database/                   # Database schemas
 │   ├── Dockerfile                  # API container config
 │   └── package.json                # Dependencies
 │
-├── 📁 simulation-worker/           # HPC job processor
-│   ├── 📁 src/                     # Python worker code
+├── frontend/                       # UI (React + TypeScript)
+│   ├── src/                        # React components
+│   ├── public/                     # Static assets
+│   └── Dockerfile                  # Frontend container
+│
+├── simulation-worker/              # HPC job processor
+│   ├── src/                        # Python worker code
 │   ├── requirements.txt            # Python dependencies
 │   └── Dockerfile                  # Worker container config
 │
-├── 📁 legacy-simulator/            # OMNeT++ simulation code
+├── legacy-simulator/               # OMNeT++ simulation code
 │   └── network-simulations/        # Simulation templates
 │
-├── 📁 docs/                        # Documentation
-│   ├── development-log.md          # Detailed progress log
-│   ├── current-status.md           # Project status
+├── monitoring/                     # Observability
+│   ├── prometheus.yml              # Metrics collection config
+│   └── grafana/                    # Dashboard configurations
 │
+├── docs/                           # Documentation
+│   ├── development-log.md          # Complete development history
+│   ├── current-status.md           # Platform status
+│   └── api-documentation.md        # API reference
 │
-├── (📁 monitoring/                  # Observability configs (To be done)
-│   ├── prometheus.yml              # Metrics collection (To be done)
-│   └── grafana/)                    # Dashboards (To be done)
-│
-├── 📄 docker-compose.yml           # Local development
-├── 📄 docker-compose.prod.yml      # Production deployment
-├── 📄 README.md                    # This file
-└── 📄 .env                         # Environment variables
+├── docker-compose.yml              # Multi-service orchestration
+├── docker-compose.prod.yml         # Production deployment
+├── README.md                       # This file
+└── .env                            # Environment variables
 ```
 
-## 🔧 Development
+## Development
 
-### **Local Development Setup**
+### Local Development Setup
 
 ```bash
 # Install dependencies
 cd api-gateway && npm install
 cd ../simulation-worker && pip install -r requirements.txt
+cd ../ai-service && pip install -r requirements.txt
 
 # Start development environment
 docker-compose up -d
+
+# Start monitoring (optional)
+docker-compose --profile monitoring up -d
 
 # Run in development mode with hot reload
 cd api-gateway && npm run dev
 ```
 
-### **Development Workflow**
+### Development Workflow
 
 ```bash
 # Create feature branch
 git checkout -b feature/[your-feature-name]
 
 # Make changes and test locally
-docker-compose restart api-gateway
+docker-compose restart ai-service
+
+# Test AI capabilities
+curl -X POST http://localhost:8000/chat -H 'Content-Type: application/json' -d '{"query":"test"}'
 
 # Run API tests
 ./test-api.sh
 
 # Commit and push
 git add .
-git commit -m "feat: add new feature"
+git commit -m "feat: add AI enhancement"
 git push origin feature/[your-feature-name]
 ```
 
-### **Testing & Quality Assurance**
+### Testing & Quality Assurance
 
 ```bash
+# AI service testing
+curl http://localhost:8000/health
+
 # API endpoint testing
 cd api-gateway && npm test
 
 # Integration testing
 ./test-integration.sh
 
-# Health checks
+# Health checks across all services
 curl http://localhost:3000/api/health
+
+# AI agent functionality testing
+python scripts/test_ai_agent.py
 
 # Load testing (optional)
 ./test-performance.sh
 ```
 
-## 📈 Monitoring
+## Monitoring
 
-### **Health Monitoring**
-- **API Health**: `GET /api/health` - Service status and connectivity
-- **Database Health**: Connection status and query performance
-- **Container Health**: Docker health checks with automatic restart
-- **System Metrics**: CPU, memory, and disk usage monitoring
+### Enhanced Health Monitoring
+- **AI Service Health**: `GET /health` - Agent status, RAG system, OpenAI connectivity
+- **Java Analytics Health**: `GET /health` - Spring Boot actuator with comprehensive metrics
+- **API Gateway Health**: `GET /api/health` - Service status and database connectivity
+- **Container Health**: Docker health checks with automatic restart across all services
+- **Cross-Service Monitoring**: Inter-service communication and dependency tracking
 
-### **Logging & Debugging**
+### Advanced Observability
+- **Prometheus Metrics**: Comprehensive collection from all 8 microservices
+- **Grafana Dashboards**: Professional visualization with custom AI metrics
+- **Real-time Alerts**: Proactive monitoring with intelligent thresholds
+- **Service Mesh Monitoring**: Cross-service communication and performance tracking
+
+### Logging & Debugging
 ```bash
+# View AI service logs
+docker-compose logs -f ai-service
+
+# View Java analytics logs
+docker-compose logs -f data-processor
+
 # View application logs
 docker-compose logs -f api-gateway
 
@@ -427,68 +578,52 @@ docker-compose logs simulation-worker
 
 # System logs (on AWS)
 sudo journalctl -u docker
+
+# Monitor all services
+docker-compose logs -f
 ```
 
-### **Performance Metrics**
-- **Response Time**: < 100ms for API endpoints
-- **Job Processing**: 5-15 seconds per simulation
-- **Memory Usage**: < 1GB total (optimized for free tier)
-- **Database Performance**: < 50ms query response time
+### Performance Metrics
+- **AI Response Time**: < 2s for complex analysis, < 500ms for simple queries
+- **API Response Time**: < 100ms for standard endpoints
+- **Job Processing**: 5-15 seconds per simulation with AI insights
+- **Memory Usage**: < 2GB total (optimized for AI workloads on free tier)
+- **Database Performance**: < 50ms query response time with AI data integration
+- **Cross-Service Communication**: < 200ms between microservices
 
-## 🎯 Recruitment & Portfolio
+## Skills Demonstrated
 
-### **Skills Demonstrated**
+### AI & Machine Learning
+- LangChain: Production agent implementation with function calling
+- RAG Systems: Vector databases and semantic search with domain expertise
+- OpenAI Integration: GPT models with intelligent fallback mechanisms
+- Cross-Service AI: Real-time analysis of live system data
 
-#### **Full-Stack Development**
-- ✅ **Backend**: Node.js, Express.js, RESTful API design
-- ✅ **Frontend**: Modern HTML/CSS/JS, responsive design
-- ✅ **Database**: PostgreSQL schema design and optimization
-- ✅ **Authentication**: JWT, bcrypt, security best practices
+### Full-Stack Development
+- **Backend**: Node.js + Python + Java microservices architecture
+- **Frontend**: React + TypeScript with AI chat interface
+- **Database**: PostgreSQL with vector database integration
+- **Authentication**: JWT, bcrypt, comprehensive security implementation
 
-#### **DevOps & Cloud**
-- ✅ **Containerization**: Docker, multi-service orchestration
-- ✅ **Cloud Deployment**: AWS EC2, security groups, automation
-- ✅ **Infrastructure**: Production-ready configuration and monitoring
-- ✅ **Automation**: Deployment scripts and CI/CD ready
+### DevOps & Cloud
+- **Containerization**: Docker, multi-service orchestration with health checks
+- **Cloud Deployment**: AWS EC2, security groups, production automation
+- **Infrastructure**: Monitoring, logging, service mesh, auto-recovery
+- **Automation**: Deployment scripts, health monitoring, CI/CD ready
 
-#### **System Design**
-- ✅ **Microservices**: Clean architecture with service separation  
-- ✅ **Scalability**: Resource optimization and performance tuning
-- ✅ **Reliability**: Health checks, error handling, graceful degradation
-- ✅ **Security**: Authentication, input validation, secure deployment
+### System Design
+- **Microservices**: Clean architecture with cross-service communication
+- **Scalability**: Resource optimization supporting AI workloads
+- **Reliability**: Health checks, error handling, graceful degradation
+- **Security**: Authentication, input validation, secure multi-service deployment
 
-
-### **Code Standards**
-- Follow ESLint configuration for JavaScript/TypeScript
-- Use conventional commit messages
-- Include tests for new features
-- Update documentation as needed
-
-### **Deployment**
-- All changes automatically tested via GitHub Actions (ready for setup)
-- Production deployments via AWS CLI automation
-- Health checks ensure zero-downtime deployments
-
----
-
-## 📞 Contact & Support
+## Contact & Support
 
 **Project Author**: Howard Ye
 - **GitHub**: [@yehao622](https://github.com/yehao622)
 - **Email**: hyedailyuse@gmail.com
 
-### **Project Links**
-- **Live Demo**:  (deployed on demand)
+### Project Links
+- **Live Demo**: (deployed on demand)
 - **Documentation**: [docs/](./docs/)
 - **Issues**: [GitHub Issues](https://github.com/yehao622/hpc-simulation-platform/issues)
-
----
-
-## 🏆 Project Status
-
-**Current Status**: ✅ **Production Ready**
-- Full-stack application deployed and functional
-- Interactive web interface with real-time capabilities
-- Professional-grade code with proper documentation
-- Ready for enterprise scaling and additional features
----
